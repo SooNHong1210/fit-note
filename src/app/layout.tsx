@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   description: "개인 PT샵 / 회원제 예약·회원 관리 도구",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "핏노트", statusBarStyle: "default" },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
