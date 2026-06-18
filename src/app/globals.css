@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* 핏노트 디자인 시스템 — 따뜻한 본(bone) 뉴트럴 + 클레이 포인트 */
+@theme {
+  --color-bone: #ebe6dd; /* 앱 배경 */
+  --color-surface: #fcfbf8; /* 카드/메인 */
+  --color-panel: #f7f3ec; /* 사이드바/패널 */
+  --color-sunken: #f2eee5; /* 입력 배경 */
+  --color-line: #e1dacd; /* 진한 보더 */
+  --color-line-soft: #ece6db; /* 옅은 보더 */
+  --color-line-warm: #ead9c7; /* 따뜻한 보더 */
+
+  --color-ink: #1f1d1a; /* 본문 */
+  --color-ink-soft: #3a362f;
+  --color-muted: #6b665e;
+  --color-faint: #9a938a;
+  --color-faintest: #b0a99d;
+
+  --color-clay: #ae6a43; /* 브랜드 포인트 */
+  --color-clay-dark: #7a4a26;
+  --color-clay-deep: #8a5a33;
+
+  --color-scheduled: #3f6cb0; /* 예정 */
+  --color-done: #3e7d5a; /* 완료 */
+  --color-done-btn: #2e5e43;
+  --color-canceled: #b25148; /* 취소 */
+  --color-gold: #b5862f; /* 배지/대기 */
+
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  word-break: keep-all; /* 한글 단어 단위 줄바꿈 */
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dad3c7;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 숫자(시간·횟수·날짜)는 모노 */
+.num {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+}
