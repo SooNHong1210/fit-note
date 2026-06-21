@@ -292,6 +292,25 @@ function DayPanel({
     onChanged();
   }
 
+  // 수업 옮기기(일정 변경) — 길이는 유지
+  const [moving, setMoving] = useState<string | null>(null);
+  const [mDate, setMDate] = useState("");
+  const [mTime, setMTime] = useState("10:00");
+
+  function startMove(l: Lesson) {
+    setMoving(l.id);
+    setMDate(ymd(new Date(l.startsAt)));
+    setMTime(hm(new Date(l.startsAt)));
+  }
+  async function move(l: Lesson) {
+    const startsAt = toISO(mDate, mTime);
+    const dur = new Date(l.endsAt).getTime() - new Date(l.startsAt).getTime();
+    const endsAt = new Date(new Date(startsAt).getTime() + dur).toISOString();
+    await repo.updateLesson(l.id, { startsAt, endsAt });
+    setMoving(null);
+    onChanged();
+  }
+
   async function markDone(l: Lesson) {
     await repo.updateLesson(l.id, { status: "done" });
     const m = members.find((x) => x.id === l.memberId);
@@ -342,6 +361,41 @@ function DayPanel({
                   {st.label}
                 </span>
               </div>
+              {moving === l.id && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    move(l);
+                  }}
+                  className="mb-2 flex flex-wrap gap-2 rounded-lg bg-panel p-2"
+                >
+                  <input
+                    type="date"
+                    value={mDate}
+                    onChange={(e) => setMDate(e.target.value)}
+                    className="num rounded-lg border border-line bg-white px-2 py-1.5 text-[12.5px]"
+                  />
+                  <input
+                    type="time"
+                    value={mTime}
+                    onChange={(e) => setMTime(e.target.value)}
+                    className="num rounded-lg border border-line bg-white px-2 py-1.5 text-[12.5px]"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-clay px-3 py-1.5 text-[12.5px] font-bold text-white"
+                  >
+                    저장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMoving(null)}
+                    className="rounded-lg border border-line bg-white px-3 py-1.5 text-[12.5px] font-semibold text-muted"
+                  >
+                    취소
+                  </button>
+                </form>
+              )}
               <div className="flex gap-1.5">
                 {l.status === "scheduled" && (
                   <>
@@ -349,7 +403,13 @@ function DayPanel({
                       onClick={() => markDone(l)}
                       className="flex-1 rounded-lg bg-[#2E5E43] py-1.5 text-[12.5px] font-bold text-white"
                     >
-                      완료 처리
+                      완료
+                    </button>
+                    <button
+                      onClick={() => startMove(l)}
+                      className="rounded-lg border border-line bg-white px-3 py-1.5 text-[12.5px] font-semibold text-clay-deep"
+                    >
+                      옮기기
                     </button>
                     <button
                       onClick={() => setStatus(l, "canceled")}
