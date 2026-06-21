@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getRepository } from "@/lib/repositories";
-import type { NewAvailability } from "@/lib/types";
+import type { NewAvailability, Trainer } from "@/lib/types";
 import { WEEKDAYS_KO } from "@/lib/date";
 import { isValidSlug, normalizeSlug, SLUG_RULE } from "@/lib/slug";
 import PushToggle from "@/components/PushToggle";
@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [sessionMinutes, setSessionMinutes] = useState(50);
   const [advanceLimit, setAdvanceLimit] = useState(0);
   const [rows, setRows] = useState<NewAvailability[]>([]);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [newTrainer, setNewTrainer] = useState("");
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -47,9 +49,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     (async () => {
-      const [shop, av] = await Promise.all([
+      const [shop, av, trs] = await Promise.all([
         repo.getShop(),
         repo.listAvailability(),
+        repo.listTrainers(),
       ]);
       if (shop) {
         setName(shop.name);
@@ -57,8 +60,10 @@ export default function SettingsPage() {
         setSessionMinutes(shop.sessionMinutes);
         setAdvanceLimit(shop.advanceLimit);
       }
+      setTrainers(trs);
       setRows(
         av.map((a) => ({
+          trainerId: a.trainerId,
           weekday: a.weekday,
           startTime: a.startTime,
           endTime: a.endTime,
@@ -69,8 +74,32 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function addTrainer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTrainer.trim()) return;
+    await repo.createTrainer({ name: newTrainer.trim() });
+    setNewTrainer("");
+    setTrainers(await repo.listTrainers());
+  }
+
+  async function removeTrainer(id: string) {
+    if (!confirm("이 선생님을 삭제할까요? 연결된 담당/일정에서 해제됩니다."))
+      return;
+    await repo.deleteTrainer(id);
+    setTrainers(await repo.listTrainers());
+    setRows((r) => r.filter((row) => row.trainerId !== id));
+  }
+
   function addRow() {
-    setRows((r) => [...r, { weekday: 1, startTime: "10:00", endTime: "18:00" }]);
+    setRows((r) => [
+      ...r,
+      {
+        trainerId: trainers[0]?.id,
+        weekday: 1,
+        startTime: "10:00",
+        endTime: "18:00",
+      },
+    ]);
   }
 
   function updateRow(i: number, patch: Partial<NewAvailability>) {
@@ -240,6 +269,47 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* 선생님 */}
+      <div className="mb-4 rounded-2xl border border-line-soft bg-white p-5">
+        <div className="mb-3.5 text-[13px] font-bold text-faint">선생님</div>
+        {trainers.length > 0 && (
+          <div className="mb-3 flex flex-col gap-1.5">
+            {trainers.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between rounded-lg bg-panel px-3 py-2"
+              >
+                <span className="text-[14px] font-semibold">{t.name}</span>
+                <button
+                  onClick={() => removeTrainer(t.id)}
+                  className="text-[12.5px] font-semibold text-canceled hover:underline"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <form onSubmit={addTrainer} className="flex gap-2">
+          <input
+            value={newTrainer}
+            onChange={(e) => setNewTrainer(e.target.value)}
+            placeholder="선생님 이름"
+            className="flex-1 rounded-lg border border-line bg-surface px-3 py-2"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-clay px-4 font-bold text-white"
+          >
+            추가
+          </button>
+        </form>
+        <p className="mt-2 text-[11.5px] text-faintest">
+          여러 선생님을 등록하면 수업·영업시간을 선생님별로 지정할 수 있습니다.
+          (1명이면 자동 적용)
+        </p>
+      </div>
+
       {/* 예약 알림 (웹푸시) */}
       <div className="mb-4">
         <PushToggle />
@@ -263,7 +333,23 @@ export default function SettingsPage() {
         ) : (
           <div className="flex flex-col gap-2">
             {rows.map((row, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                {trainers.length > 0 && (
+                  <select
+                    value={row.trainerId ?? ""}
+                    onChange={(e) =>
+                      updateRow(i, { trainerId: e.target.value || undefined })
+                    }
+                    className="rounded-lg border border-line bg-surface px-2 py-2 text-[13px]"
+                  >
+                    <option value="">전체</option>
+                    {trainers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <select
                   value={row.weekday}
                   onChange={(e) =>

@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getRepository } from "@/lib/repositories";
-import type { Comment, Lesson, Member } from "@/lib/types";
+import type { Comment, Lesson, Member, Trainer } from "@/lib/types";
 import { clampPassUsed, nextPassUsedOnDone, passRemaining } from "@/lib/pass";
 import { fmtDate, fmtDateTime } from "@/lib/date";
 
@@ -29,20 +29,24 @@ export default function MemberDetailPage({
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [passInput, setPassInput] = useState("");
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [editing, setEditing] = useState(false);
   const [eName, setEName] = useState("");
   const [eBirth, setEBirth] = useState("");
   const [ePhone, setEPhone] = useState("");
+  const [eTrainer, setETrainer] = useState("");
 
   async function refresh() {
-    const [m, ls, cs] = await Promise.all([
+    const [m, ls, cs, trs] = await Promise.all([
       repo.getMember(id),
       repo.listLessonsByMember(id),
       repo.listCommentsByMember(id),
+      repo.listTrainers(),
     ]);
     setMember(m);
     setLessons(ls);
     setComments(cs);
+    setTrainers(trs);
     setLoading(false);
   }
 
@@ -64,6 +68,7 @@ export default function MemberDetailPage({
     setEName(member.name);
     setEBirth(member.birthDate ?? "");
     setEPhone(member.phone ?? "");
+    setETrainer(member.trainerId ?? "");
     setEditing(true);
   }
 
@@ -74,6 +79,7 @@ export default function MemberDetailPage({
       name: eName.trim(),
       birthDate: eBirth.trim() || undefined,
       phone: ePhone.trim() || undefined,
+      trainerId: eTrainer || undefined,
     });
     setEditing(false);
     refresh();
@@ -151,6 +157,20 @@ export default function MemberDetailPage({
             placeholder="전화번호 (선택)"
             className="num w-full rounded-lg border border-line bg-surface px-3 py-2"
           />
+          {trainers.length > 0 && (
+            <select
+              value={eTrainer}
+              onChange={(e) => setETrainer(e.target.value)}
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+            >
+              <option value="">담당 선생님 없음</option>
+              {trainers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="flex gap-2 pt-1">
             <button
               type="submit"
@@ -176,9 +196,14 @@ export default function MemberDetailPage({
             <div className="text-[24px] font-extrabold tracking-tight">
               {member.name}
             </div>
-            <div className="num mt-1 flex gap-3.5 text-[13px] text-muted">
+            <div className="num mt-1 flex flex-wrap gap-3.5 text-[13px] text-muted">
               {member.birthDate && <span>{member.birthDate}</span>}
               {member.phone && <span>{member.phone}</span>}
+              {member.trainerId && (
+                <span className="font-semibold text-clay-deep">
+                  담당 {trainers.find((t) => t.id === member.trainerId)?.name}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5">

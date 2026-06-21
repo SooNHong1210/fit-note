@@ -181,6 +181,26 @@ describe("그룹 수업 선착순 등록", () => {
   });
 });
 
+describe("선생님(멀티 트레이너)", () => {
+  it("생성/목록", async () => {
+    const r = repo();
+    await r.createTrainer({ name: "김선생" });
+    await r.createTrainer({ name: "이선생" });
+    const list = await r.listTrainers();
+    expect(list.map((t) => t.name)).toEqual(["김선생", "이선생"]);
+  });
+
+  it("삭제 시 회원 담당에서 해제", async () => {
+    const r = repo();
+    const t = await r.createTrainer({ name: "김선생" });
+    const m = await r.createMember({ name: "회원" });
+    await r.updateMember(m.id, { trainerId: t.id });
+    await r.deleteTrainer(t.id);
+    const after = await r.getMember(m.id);
+    expect(after?.trainerId).toBeUndefined();
+  });
+});
+
 describe("회원권 업데이트", () => {
   it("passTotal/passUsed 수정", async () => {
     const r = repo();

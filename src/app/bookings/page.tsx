@@ -50,6 +50,7 @@ export default function BookingsPage() {
   async function approve(b: Booking) {
     await repo.createLesson({
       memberId: b.memberId,
+      trainerId: b.trainerId,
       startsAt: b.slotStartsAt,
       endsAt: b.slotEndsAt,
     });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getRepository } from "@/lib/repositories";
-import type { ClassWithCount, Lesson, Member } from "@/lib/types";
+import type { ClassWithCount, Lesson, Member, Trainer } from "@/lib/types";
 import { nextPassUsedOnDone } from "@/lib/pass";
 import {
   addDays,
@@ -29,6 +29,7 @@ export default function CalendarPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [classes, setClasses] = useState<ClassWithCount[]>([]);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
 
   const gridStart = useMemo(() => calendarGridStart(month), [month]);
@@ -40,14 +41,16 @@ export default function CalendarPage() {
   async function refresh() {
     const from = gridStart.toISOString();
     const to = addDays(gridStart, 42).toISOString();
-    const [ls, ms, cs] = await Promise.all([
+    const [ls, ms, cs, trs] = await Promise.all([
       repo.listLessons({ from, to }),
       repo.listMembers(),
       repo.listClasses({ from, to }),
+      repo.listTrainers(),
     ]);
     setLessons(ls);
     setMembers(ms);
     setClasses(cs);
+    setTrainers(trs);
   }
 
   useEffect(() => {
@@ -208,6 +211,7 @@ export default function CalendarPage() {
           lessons={lessonsByDay(selectedDay)}
           classes={classesByDay(selectedDay)}
           members={members}
+          trainers={trainers}
           memberName={memberName}
           onChanged={refresh}
         />
@@ -221,6 +225,7 @@ function DayPanel({
   lessons,
   classes,
   members,
+  trainers,
   memberName,
   onChanged,
 }: {
@@ -228,6 +233,7 @@ function DayPanel({
   lessons: Lesson[];
   classes: ClassWithCount[];
   members: Member[];
+  trainers: Trainer[];
   memberName: (id: string) => string;
   onChanged: () => void;
 }) {
@@ -237,6 +243,7 @@ function DayPanel({
   const [memberId, setMemberId] = useState("");
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState(50);
+  const [lTrainer, setLTrainer] = useState("");
 
   // 그룹 수업
   const [addingClass, setAddingClass] = useState(false);
@@ -244,8 +251,12 @@ function DayPanel({
   const [cTime, setCTime] = useState("10:00");
   const [cDuration, setCDuration] = useState(50);
   const [cCapacity, setCCapacity] = useState(8);
+  const [cTrainer, setCTrainer] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [roster, setRoster] = useState<Member[]>([]);
+
+  const trainerName = (id?: string) =>
+    id ? (trainers.find((t) => t.id === id)?.name ?? "") : "";
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -254,7 +265,12 @@ function DayPanel({
     const endsAt = new Date(
       new Date(startsAt).getTime() + duration * 60000,
     ).toISOString();
-    await repo.createLesson({ memberId, startsAt, endsAt });
+    await repo.createLesson({
+      memberId,
+      trainerId: lTrainer || undefined,
+      startsAt,
+      endsAt,
+    });
     setMemberId("");
     setAdding(false);
     onChanged();
@@ -269,6 +285,7 @@ function DayPanel({
     ).toISOString();
     await repo.createClass({
       title: cTitle.trim(),
+      trainerId: cTrainer || undefined,
       startsAt,
       endsAt,
       capacity: cCapacity,
@@ -353,6 +370,11 @@ function DayPanel({
                   <span className="text-[14.5px] font-bold group-hover:text-clay group-hover:underline">
                     {memberName(l.memberId)}
                   </span>
+                  {trainerName(l.trainerId) && (
+                    <span className="text-[11px] font-semibold text-clay-deep">
+                      · {trainerName(l.trainerId)}
+                    </span>
+                  )}
                 </button>
                 <span
                   className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
@@ -478,7 +500,12 @@ function DayPanel({
             >
               <select
                 value={memberId}
-                onChange={(e) => setMemberId(e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setMemberId(id);
+                  const m = members.find((x) => x.id === id);
+                  setLTrainer(m?.trainerId ?? trainers[0]?.id ?? "");
+                }}
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               >
                 <option value="">회원 선택…</option>
@@ -488,6 +515,20 @@ function DayPanel({
                   </option>
                 ))}
               </select>
+              {trainers.length > 0 && (
+                <select
+                  value={lTrainer}
+                  onChange={(e) => setLTrainer(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                >
+                  <option value="">선생님 미지정</option>
+                  {trainers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="flex gap-2">
                 <input
                   type="time"
@@ -542,6 +583,11 @@ function DayPanel({
                   <span className="text-[14px] font-bold text-clay-dark">
                     {c.title}
                   </span>
+                  {trainerName(c.trainerId) && (
+                    <span className="text-[11px] font-semibold text-clay-deep">
+                      · {trainerName(c.trainerId)}
+                    </span>
+                  )}
                 </div>
                 <span className="num text-[13px] font-bold text-clay">
                   {c.enrolledCount}/{c.capacity}
@@ -589,6 +635,20 @@ function DayPanel({
                 placeholder="수업 이름 (예: 모닝 요가)"
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               />
+              {trainers.length > 0 && (
+                <select
+                  value={cTrainer}
+                  onChange={(e) => setCTrainer(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                >
+                  <option value="">선생님(강사) 미지정</option>
+                  {trainers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="flex gap-2">
                 <input
                   type="time"
@@ -630,7 +690,10 @@ function DayPanel({
             </form>
           ) : (
             <button
-              onClick={() => setAddingClass(true)}
+              onClick={() => {
+                setCTrainer(trainers[0]?.id ?? "");
+                setAddingClass(true);
+              }}
               className="w-full rounded-[10px] border-[1.5px] border-dashed border-[#E0CBB4] py-2.5 text-[13px] font-semibold text-clay-deep"
             >
               + 그룹 수업 만들기

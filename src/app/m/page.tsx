@@ -10,6 +10,7 @@ import type {
   Member,
   MemberClassView,
   Shop,
+  Trainer,
 } from "@/lib/types";
 import { computeAvailableSlots, type Slot } from "@/lib/slots";
 import { passRemaining } from "@/lib/pass";
@@ -261,6 +262,7 @@ function MemberHome({
   const [tab, setTab] = useState<"book" | "classes" | "status">("book");
   const [shop, setShop] = useState<Shop | null>(null);
   const [classes, setClasses] = useState<MemberClassView[]>([]);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [availability, setAvailability] = useState<Availability[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
@@ -271,7 +273,7 @@ function MemberHome({
   const [requesting, setRequesting] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [sh, av, ls, all, mine, cs, fresh, cls] = await Promise.all([
+    const [sh, av, ls, all, mine, cs, fresh, cls, trs] = await Promise.all([
       repo.getShop(),
       repo.listAvailability(),
       repo.listLessons(),
@@ -280,6 +282,7 @@ function MemberHome({
       repo.listCommentsByMember(member.id),
       repo.getMember(member.id),
       repo.listClassesForMember(member.id),
+      repo.listTrainers(),
     ]);
     setShop(sh);
     setAvailability(av);
@@ -289,6 +292,7 @@ function MemberHome({
     setComments(cs);
     if (fresh) setMe(fresh);
     setClasses(cls);
+    setTrainers(trs);
     setLoading(false);
   }, [repo, member.id]);
 
@@ -306,12 +310,13 @@ function MemberHome({
   const limit = shop?.advanceLimit ?? 0;
   const limitReached = limit > 0 && activeBookings >= limit;
 
-  async function request(slot: Slot) {
+  async function request(slot: Slot, trainerId?: string) {
     if (limitReached) return;
     setRequesting(slot.startsAt);
     try {
       await repo.createBooking({
         memberId: member.id,
+        trainerId,
         slotStartsAt: slot.startsAt,
         slotEndsAt: slot.endsAt,
       });
@@ -375,6 +380,8 @@ function MemberHome({
           sessionMinutes={shop?.sessionMinutes ?? 0}
           lessons={lessons}
           bookings={allBookings}
+          trainers={trainers}
+          defaultTrainerId={me.trainerId}
           requesting={requesting}
           onRequest={request}
           limitReached={limitReached}
@@ -399,6 +406,8 @@ function BookCalendar({
   sessionMinutes,
   lessons,
   bookings,
+  trainers,
+  defaultTrainerId,
   requesting,
   onRequest,
   limitReached,
@@ -409,8 +418,10 @@ function BookCalendar({
   sessionMinutes: number;
   lessons: Lesson[];
   bookings: Booking[];
+  trainers: Trainer[];
+  defaultTrainerId?: string;
   requesting: string | null;
-  onRequest: (s: Slot) => void;
+  onRequest: (s: Slot, trainerId?: string) => void;
   limitReached: boolean;
   limit: number;
 }) {
@@ -418,14 +429,28 @@ function BookCalendar({
   const thisMonth = useMemo(() => startOfMonth(today), [today]);
   const [month, setMonth] = useState(thisMonth);
   const [selected, setSelected] = useState<string | null>(null);
+  const hasTrainers = trainers.length > 0;
+  const [trainerId, setTrainerId] = useState(
+    defaultTrainerId ?? trainers[0]?.id ?? "",
+  );
 
   const slotsByDay = useMemo(() => {
     const monthEnd = addDays(addMonths(month, 1), -1);
+    // 선생님이 있으면 선택 선생님 기준으로 영업시간·바쁜시간 필터(미지정은 공통)
+    const av = hasTrainers
+      ? availability.filter((a) => !a.trainerId || a.trainerId === trainerId)
+      : availability;
+    const ls = hasTrainers
+      ? lessons.filter((l) => !l.trainerId || l.trainerId === trainerId)
+      : lessons;
+    const bk = hasTrainers
+      ? bookings.filter((b) => !b.trainerId || b.trainerId === trainerId)
+      : bookings;
     const slots = computeAvailableSlots({
-      availability,
+      availability: av,
       sessionMinutes,
-      lessons,
-      bookings,
+      lessons: ls,
+      bookings: bk,
       from: month,
       to: monthEnd,
       now: today,
@@ -437,7 +462,16 @@ function BookCalendar({
       map.get(key)!.push(s);
     }
     return map;
-  }, [availability, sessionMinutes, lessons, bookings, month, today]);
+  }, [
+    availability,
+    sessionMinutes,
+    lessons,
+    bookings,
+    month,
+    today,
+    hasTrainers,
+    trainerId,
+  ]);
 
   const gridStart = useMemo(() => calendarGridStart(month), [month]);
   const days = useMemo(
@@ -462,6 +496,31 @@ function BookCalendar({
         <div className="mb-3 rounded-xl border border-line-warm bg-[#FBF3E1] px-3.5 py-2.5 text-[12.5px] font-semibold text-[#8A6A2A]">
           미리 예약은 최대 {limit}회까지 가능합니다. 기존 예약이 처리되면 다시
           신청할 수 있어요.
+        </div>
+      )}
+      {trainers.length > 1 && (
+        <div className="mb-3">
+          <div className="mb-1.5 text-[12px] font-semibold text-faint">
+            선생님 선택
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {trainers.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTrainerId(t.id);
+                  setSelected(null);
+                }}
+                className="rounded-full px-3 py-1.5 text-[13px] font-bold"
+                style={{
+                  background: trainerId === t.id ? "#AE6A43" : "#F2EEE5",
+                  color: trainerId === t.id ? "#fff" : "#6B665E",
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="mb-3 flex items-center justify-between">
@@ -571,7 +630,9 @@ function BookCalendar({
               {selectedSlots.map((s) => (
                 <button
                   key={s.startsAt}
-                  onClick={() => onRequest(s)}
+                  onClick={() =>
+                    onRequest(s, hasTrainers ? trainerId : undefined)
+                  }
                   disabled={requesting === s.startsAt || limitReached}
                   className="num rounded-[10px] border border-line bg-surface py-2.5 text-[14px] font-semibold text-ink disabled:opacity-50"
                 >

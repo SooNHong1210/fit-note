@@ -17,7 +17,9 @@ import type {
   NewGroupClass,
   NewLesson,
   NewMember,
+  NewTrainer,
   Shop,
+  Trainer,
 } from "@/lib/types";
 
 // 회원 수정 가능 필드 (devicePublicKey/status 포함)
@@ -66,6 +68,12 @@ export interface Repository {
     sessionMinutes: number;
     advanceLimit: number;
   }): Promise<Shop>;
+
+  // 선생님 (멀티 선생님 — 오너가 레코드로 관리)
+  listTrainers(): Promise<Trainer[]>;
+  createTrainer(input: NewTrainer): Promise<Trainer>;
+  updateTrainer(id: string, patch: Partial<NewTrainer>): Promise<Trainer>;
+  deleteTrainer(id: string): Promise<void>;
 
   // Stage 1: 영업시간
   listAvailability(): Promise<Availability[]>;

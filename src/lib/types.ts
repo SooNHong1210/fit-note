@@ -35,6 +35,7 @@ export interface Member {
 export interface Lesson {
   id: string;
   memberId: string;
+  trainerId?: string; // 담당 선생님(멀티 선생님)
   startsAt: string; // ISO
   endsAt: string; // ISO
   status: LessonStatus;
@@ -71,6 +72,7 @@ export interface Availability {
 export interface Booking {
   id: string;
   memberId: string;
+  trainerId?: string; // 신청 대상 선생님
   slotStartsAt: string; // ISO
   slotEndsAt: string; // ISO
   status: BookingStatus;
@@ -82,6 +84,7 @@ export interface Booking {
 export interface GroupClass {
   id: string;
   title: string;
+  trainerId?: string; // 담당 선생님(강사)
   startsAt: string; // ISO
   endsAt: string; // ISO
   capacity: number; // 총 정원
@@ -119,3 +122,4 @@ export type NewBooking = Omit<
 >;
 export type NewAvailability = Omit<Availability, "id">;
 export type NewGroupClass = Omit<GroupClass, "id" | "createdAt">;
+export type NewTrainer = Omit<Trainer, "id" | "createdAt" | "shopId">;

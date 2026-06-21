@@ -20,7 +20,9 @@ import type {
   NewGroupClass,
   NewLesson,
   NewMember,
+  NewTrainer,
   Shop,
+  Trainer,
 } from "@/lib/types";
 import type { MemberPatch, Repository } from "./types";
 
@@ -38,9 +40,17 @@ type MemberRow = {
 type LessonRow = {
   id: string;
   member_id: string;
+  trainer_id: string | null;
   starts_at: string;
   ends_at: string;
   status: Lesson["status"];
+  created_at: string;
+};
+type TrainerRow = {
+  id: string;
+  shop_id: string;
+  name: string;
+  phone: string | null;
   created_at: string;
 };
 type CommentRow = {
@@ -60,6 +70,7 @@ type ShopRow = {
 };
 type AvailabilityRow = {
   id: string;
+  trainer_id: string | null;
   weekday: number;
   start_time: string;
   end_time: string;
@@ -67,6 +78,7 @@ type AvailabilityRow = {
 type BookingRow = {
   id: string;
   member_id: string;
+  trainer_id: string | null;
   slot_starts_at: string;
   slot_ends_at: string;
   status: Booking["status"];
@@ -88,9 +100,17 @@ const toMember = (r: MemberRow): Member => ({
 const toLesson = (r: LessonRow): Lesson => ({
   id: r.id,
   memberId: r.member_id,
+  trainerId: r.trainer_id ?? undefined,
   startsAt: r.starts_at,
   endsAt: r.ends_at,
   status: r.status,
+  createdAt: r.created_at,
+});
+const toTrainer = (r: TrainerRow): Trainer => ({
+  id: r.id,
+  shopId: r.shop_id,
+  name: r.name,
+  phone: r.phone ?? undefined,
   createdAt: r.created_at,
 });
 const toComment = (r: CommentRow): Comment => ({
@@ -110,6 +130,7 @@ const toShop = (r: ShopRow): Shop => ({
 });
 const toAvailability = (r: AvailabilityRow): Availability => ({
   id: r.id,
+  trainerId: r.trainer_id ?? undefined,
   weekday: r.weekday,
   startTime: r.start_time,
   endTime: r.end_time,
@@ -117,6 +138,7 @@ const toAvailability = (r: AvailabilityRow): Availability => ({
 type GroupClassRow = {
   id: string;
   title: string;
+  trainer_id: string | null;
   starts_at: string;
   ends_at: string;
   capacity: number;
@@ -126,6 +148,7 @@ type GroupClassRow = {
 const toClass = (r: GroupClassRow): ClassWithCount => ({
   id: r.id,
   title: r.title,
+  trainerId: r.trainer_id ?? undefined,
   startsAt: r.starts_at,
   endsAt: r.ends_at,
   capacity: r.capacity,
@@ -136,6 +159,7 @@ const toClass = (r: GroupClassRow): ClassWithCount => ({
 const toBooking = (r: BookingRow): Booking => ({
   id: r.id,
   memberId: r.member_id,
+  trainerId: r.trainer_id ?? undefined,
   slotStartsAt: r.slot_starts_at,
   slotEndsAt: r.slot_ends_at,
   status: r.status,
@@ -383,6 +407,7 @@ export class SupabaseRepository implements Repository {
       .insert({
         shop_id: this.sid(),
         member_id: input.memberId,
+        trainer_id: input.trainerId ?? null,
         starts_at: input.startsAt,
         ends_at: input.endsAt,
         status: input.status ?? "scheduled",
@@ -448,6 +473,54 @@ export class SupabaseRepository implements Repository {
     if (error) throw error;
   }
 
+  // ---- 선생님 ----
+  async listTrainers(): Promise<Trainer[]> {
+    if (!this.hasShop()) return [];
+    const { data, error } = await getSupabase()
+      .from("trainers")
+      .select("*")
+      .eq("shop_id", this.sid())
+      .order("name");
+    if (error) throw error;
+    return (data as TrainerRow[]).map(toTrainer);
+  }
+
+  async createTrainer(input: NewTrainer): Promise<Trainer> {
+    const { data, error } = await getSupabase()
+      .from("trainers")
+      .insert({
+        shop_id: this.sid(),
+        name: input.name,
+        phone: input.phone ?? null,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toTrainer(data as TrainerRow);
+  }
+
+  async updateTrainer(
+    id: string,
+    patch: Partial<NewTrainer>,
+  ): Promise<Trainer> {
+    const { data, error } = await getSupabase()
+      .from("trainers")
+      .update({
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toTrainer(data as TrainerRow);
+  }
+
+  async deleteTrainer(id: string): Promise<void> {
+    const { error } = await getSupabase().from("trainers").delete().eq("id", id);
+    if (error) throw error;
+  }
+
   // ---- 영업시간 ----
   async listAvailability(): Promise<Availability[]> {
     if (!this.hasShop()) return [];
@@ -475,6 +548,7 @@ export class SupabaseRepository implements Repository {
       .insert(
         list.map((a) => ({
           shop_id: shopId,
+          trainer_id: a.trainerId ?? null,
           weekday: a.weekday,
           start_time: a.startTime,
           end_time: a.endTime,
@@ -513,6 +587,7 @@ export class SupabaseRepository implements Repository {
       .insert({
         shop_id: this.sid(),
         member_id: input.memberId,
+        trainer_id: input.trainerId ?? null,
         slot_starts_at: input.slotStartsAt,
         slot_ends_at: input.slotEndsAt,
         status: "requested",
@@ -573,6 +648,7 @@ export class SupabaseRepository implements Repository {
       .insert({
         shop_id: this.sid(),
         title: input.title,
+        trainer_id: input.trainerId ?? null,
         starts_at: input.startsAt,
         ends_at: input.endsAt,
         capacity: input.capacity,

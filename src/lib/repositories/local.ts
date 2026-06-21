@@ -22,7 +22,9 @@ import type {
   NewGroupClass,
   NewLesson,
   NewMember,
+  NewTrainer,
   Shop,
+  Trainer,
 } from "@/lib/types";
 import { getActiveShopId, setActiveShopId } from "@/lib/activeShop";
 import { normalizeSlug } from "@/lib/slug";
@@ -33,6 +35,7 @@ const dataKey = (shopId: string) => `fitnote.shopdata.${shopId}`;
 
 interface Partition {
   members: Member[];
+  trainers: Trainer[];
   lessons: Lesson[];
   comments: Comment[];
   availability: Availability[];
@@ -44,6 +47,7 @@ interface Partition {
 function emptyPartition(): Partition {
   return {
     members: [],
+    trainers: [],
     lessons: [],
     comments: [],
     availability: [],
@@ -311,6 +315,55 @@ export class LocalRepository implements Repository {
   async deleteComment(id: string): Promise<void> {
     const p = this.load();
     p.comments = p.comments.filter((c) => c.id !== id);
+    this.save(p);
+  }
+
+  // ---- 선생님 ----
+  async listTrainers(): Promise<Trainer[]> {
+    if (!this.hasShop()) return [];
+    return this.load().trainers.sort((a, b) =>
+      a.name.localeCompare(b.name, "ko"),
+    );
+  }
+
+  async createTrainer(input: NewTrainer): Promise<Trainer> {
+    const p = this.load();
+    const t: Trainer = {
+      ...input,
+      id: uid(),
+      createdAt: new Date().toISOString(),
+    };
+    p.trainers.push(t);
+    this.save(p);
+    return t;
+  }
+
+  async updateTrainer(
+    id: string,
+    patch: Partial<NewTrainer>,
+  ): Promise<Trainer> {
+    const p = this.load();
+    const idx = p.trainers.findIndex((t) => t.id === id);
+    if (idx < 0) throw new Error("trainer not found");
+    p.trainers[idx] = { ...p.trainers[idx], ...patch };
+    this.save(p);
+    return p.trainers[idx];
+  }
+
+  async deleteTrainer(id: string): Promise<void> {
+    const p = this.load();
+    p.trainers = p.trainers.filter((t) => t.id !== id);
+    // 연결 해제(담당/세션의 trainerId 비움)
+    p.members = p.members.map((m) =>
+      m.trainerId === id ? { ...m, trainerId: undefined } : m,
+    );
+    p.lessons = p.lessons.map((l) =>
+      l.trainerId === id ? { ...l, trainerId: undefined } : l,
+    );
+    p.classes = p.classes.map((c) =>
+      c.trainerId === id ? { ...c, trainerId: undefined } : c,
+    );
+    p.availability = p.availability.filter((a) => a.trainerId !== id);
     this.save(p);
   }
 
