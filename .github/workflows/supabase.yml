@@ -1,26 +1,26 @@
-# db/*.sql 변경을 main에 push하면 Supabase에 자동 적용.
-# (Vercel 자동배포의 DB 버전 — 스키마/RLS/RPC를 멱등 SQL로 재적용)
+# supabase/migrations/** 를 main에 push하면 Supabase에 마이그레이션 자동 적용.
+# (Supabase CLI `db push` — 적용 이력이 schema_migrations 에 기록됨)
 #
 # 필요한 GitHub 시크릿 (Settings → Secrets and variables → Actions):
 #   SUPABASE_DB_URL = Supabase 연결 문자열(비밀번호 포함)
-#     Supabase → Settings → Database → Connection string →
-#       "Session pooler"(IPv4, 포트 5432) URI 권장. 예:
+#     Supabase → Settings → Database → Connection string → URI →
+#       "Session pooler"(IPv4, 포트 5432) 권장. 예:
 #       postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#     (GitHub Actions는 IPv4라 Direct 연결(IPv6)은 실패할 수 있어 풀러 사용)
 #
-# ⚠️ 적용 순서: schema → rls-secure(회원 보안 RLS) → realtime.
-#    rls-secure 는 익명 인증 기반이므로 Supabase에서 Anonymous sign-ins 활성화 필요.
-#    (reset.sql 은 파괴적이라 자동 적용에서 제외)
+# ⚠️ rls_secure 마이그레이션은 익명 인증 기반이므로
+#    Supabase → Authentication → Anonymous sign-ins 활성화 필요.
 
 name: Supabase migrate
 
 on:
   push:
     branches: [main]
-    paths: ["db/**"]
+    paths: ["supabase/migrations/**"]
   workflow_dispatch: {}
 
 jobs:
-  migrate:
+  deploy:
     runs-on: ubuntu-latest
     env:
       DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -29,14 +29,13 @@ jobs:
 
       - name: SUPABASE_DB_URL 미설정 안내
         if: ${{ env.DB_URL == '' }}
-        run: echo "::warning::SUPABASE_DB_URL 시크릿이 없어 DB 적용을 건너뜁니다. GitHub 시크릿에 추가하세요."
+        run: echo "::warning::SUPABASE_DB_URL 시크릿이 없어 마이그레이션을 건너뜁니다."
 
-      - name: Apply SQL to Supabase
+      - uses: supabase/setup-cli@v1
         if: ${{ env.DB_URL != '' }}
-        run: |
-          set -e
-          for f in db/schema.sql db/rls-secure.sql db/realtime.sql; do
-            echo "▶ applying $f"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f"
-          done
-          echo "✓ Supabase 스키마 동기화 완료"
+        with:
+          version: latest
+
+      - name: Push migrations
+        if: ${{ env.DB_URL != '' }}
+        run: supabase db push --db-url "$DB_URL"
