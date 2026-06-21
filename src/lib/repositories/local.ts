@@ -8,12 +8,18 @@
 import type {
   Availability,
   Booking,
+  ClassWithCount,
   Comment,
+  EnrollResult,
+  Enrollment,
+  GroupClass,
   Lesson,
   Member,
+  MemberClassView,
   NewAvailability,
   NewBooking,
   NewComment,
+  NewGroupClass,
   NewLesson,
   NewMember,
   Shop,
@@ -31,6 +37,8 @@ interface Partition {
   comments: Comment[];
   availability: Availability[];
   bookings: Booking[];
+  classes: GroupClass[];
+  enrollments: Enrollment[];
 }
 
 function emptyPartition(): Partition {
@@ -40,6 +48,8 @@ function emptyPartition(): Partition {
     comments: [],
     availability: [],
     bookings: [],
+    classes: [],
+    enrollments: [],
   };
 }
 
@@ -377,5 +387,95 @@ export class LocalRepository implements Repository {
       return b;
     });
     if (changed) this.save(p);
+  }
+
+  // ---- 그룹 수업 ----
+  private withCount(p: Partition, c: GroupClass): ClassWithCount {
+    return {
+      ...c,
+      enrolledCount: p.enrollments.filter((e) => e.classId === c.id).length,
+    };
+  }
+
+  async listClasses(range?: {
+    from: string;
+    to: string;
+  }): Promise<ClassWithCount[]> {
+    if (!this.hasShop()) return [];
+    const p = this.load();
+    let list = p.classes;
+    if (range)
+      list = list.filter(
+        (c) => c.startsAt >= range.from && c.startsAt < range.to,
+      );
+    return list
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+      .map((c) => this.withCount(p, c));
+  }
+
+  async createClass(input: NewGroupClass): Promise<ClassWithCount> {
+    const p = this.load();
+    const cls: GroupClass = {
+      ...input,
+      id: uid(),
+      createdAt: new Date().toISOString(),
+    };
+    p.classes.push(cls);
+    this.save(p);
+    return { ...cls, enrolledCount: 0 };
+  }
+
+  async deleteClass(id: string): Promise<void> {
+    const p = this.load();
+    p.classes = p.classes.filter((c) => c.id !== id);
+    p.enrollments = p.enrollments.filter((e) => e.classId !== id);
+    this.save(p);
+  }
+
+  async listEnrolledMembers(classId: string): Promise<Member[]> {
+    const p = this.load();
+    const ids = new Set(
+      p.enrollments.filter((e) => e.classId === classId).map((e) => e.memberId),
+    );
+    return p.members.filter((m) => ids.has(m.id));
+  }
+
+  async listClassesForMember(memberId: string): Promise<MemberClassView[]> {
+    if (!this.hasShop()) return [];
+    const p = this.load();
+    return p.classes
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+      .map((c) => ({
+        ...this.withCount(p, c),
+        enrolledByMe: p.enrollments.some(
+          (e) => e.classId === c.id && e.memberId === memberId,
+        ),
+      }));
+  }
+
+  async enrollClass(classId: string, memberId: string): Promise<EnrollResult> {
+    const p = this.load();
+    const cls = p.classes.find((c) => c.id === classId);
+    if (!cls) return "not_member";
+    if (p.enrollments.some((e) => e.classId === classId && e.memberId === memberId))
+      return "already";
+    const count = p.enrollments.filter((e) => e.classId === classId).length;
+    if (count >= cls.capacity) return "full";
+    p.enrollments.push({
+      id: uid(),
+      classId,
+      memberId,
+      createdAt: new Date().toISOString(),
+    });
+    this.save(p);
+    return "ok";
+  }
+
+  async cancelEnrollment(classId: string, memberId: string): Promise<void> {
+    const p = this.load();
+    p.enrollments = p.enrollments.filter(
+      (e) => !(e.classId === classId && e.memberId === memberId),
+    );
+    this.save(p);
   }
 }

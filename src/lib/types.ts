@@ -78,6 +78,30 @@ export interface Booking {
   respondedAt?: string;
 }
 
+// 그룹 수업(정원제, 선착순 자동 등록 — 선생님 승인 없음)
+export interface GroupClass {
+  id: string;
+  title: string;
+  startsAt: string; // ISO
+  endsAt: string; // ISO
+  capacity: number; // 총 정원
+  createdAt: string;
+}
+
+// 정원 대비 등록 수가 붙은 뷰
+export type ClassWithCount = GroupClass & { enrolledCount: number };
+// 회원 화면용(내가 등록했는지 포함)
+export type MemberClassView = ClassWithCount & { enrolledByMe: boolean };
+
+export interface Enrollment {
+  id: string;
+  classId: string;
+  memberId: string;
+  createdAt: string;
+}
+
+export type EnrollResult = "ok" | "full" | "already" | "not_member";
+
 // 생성 입력 타입 (id/createdAt은 저장소가 채움)
 export type NewMember = Omit<
   Member,
@@ -94,3 +118,4 @@ export type NewBooking = Omit<
   "id" | "createdAt" | "status" | "respondedAt"
 >;
 export type NewAvailability = Omit<Availability, "id">;
+export type NewGroupClass = Omit<GroupClass, "id" | "createdAt">;

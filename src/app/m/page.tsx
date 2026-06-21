@@ -8,6 +8,7 @@ import type {
   Comment,
   Lesson,
   Member,
+  MemberClassView,
   Shop,
 } from "@/lib/types";
 import { computeAvailableSlots, type Slot } from "@/lib/slots";
@@ -257,8 +258,9 @@ function MemberHome({
   onChangeShop: () => void;
 }) {
   const repo = getRepository();
-  const [tab, setTab] = useState<"book" | "status">("book");
+  const [tab, setTab] = useState<"book" | "classes" | "status">("book");
   const [shop, setShop] = useState<Shop | null>(null);
+  const [classes, setClasses] = useState<MemberClassView[]>([]);
   const [availability, setAvailability] = useState<Availability[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
@@ -269,7 +271,7 @@ function MemberHome({
   const [requesting, setRequesting] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [sh, av, ls, all, mine, cs, fresh] = await Promise.all([
+    const [sh, av, ls, all, mine, cs, fresh, cls] = await Promise.all([
       repo.getShop(),
       repo.listAvailability(),
       repo.listLessons(),
@@ -277,6 +279,7 @@ function MemberHome({
       repo.listBookingsByMember(member.id),
       repo.listCommentsByMember(member.id),
       repo.getMember(member.id),
+      repo.listClassesForMember(member.id),
     ]);
     setShop(sh);
     setAvailability(av);
@@ -285,6 +288,7 @@ function MemberHome({
     setMyBookings(mine);
     setComments(cs);
     if (fresh) setMe(fresh);
+    setClasses(cls);
     setLoading(false);
   }, [repo, member.id]);
 
@@ -346,18 +350,18 @@ function MemberHome({
       </header>
 
       <div className="mb-4 flex gap-1 rounded-[11px] border border-line-soft bg-panel p-1">
-        {(["book", "status"] as const).map((t) => (
+        {(["book", "classes", "status"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className="flex-1 rounded-[8px] py-2 text-[13.5px] font-bold transition"
+            className="flex-1 rounded-[8px] py-2 text-[13px] font-bold transition"
             style={{
               background: tab === t ? "#fff" : "transparent",
               color: tab === t ? "#1F1D1A" : "#9A938A",
               boxShadow: tab === t ? "0 1px 2px rgba(31,29,26,0.06)" : "none",
             }}
           >
-            {t === "book" ? "예약하기" : "내 예약"}
+            {t === "book" ? "예약하기" : t === "classes" ? "클래스" : "내 예약"}
           </button>
         ))}
       </div>
@@ -375,6 +379,12 @@ function MemberHome({
           onRequest={request}
           limitReached={limitReached}
           limit={limit}
+        />
+      ) : tab === "classes" ? (
+        <ClassesTab
+          classes={classes}
+          memberId={member.id}
+          onChanged={refresh}
         />
       ) : (
         <StatusTab member={me} bookings={myBookings} comments={comments} />
@@ -576,6 +586,108 @@ function BookCalendar({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function ClassesTab({
+  classes,
+  memberId,
+  onChanged,
+}: {
+  classes: MemberClassView[];
+  memberId: string;
+  onChanged: () => void;
+}) {
+  const repo = getRepository();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+
+  const upcoming = classes.filter((c) => new Date(c.endsAt) >= new Date());
+
+  async function join(classId: string) {
+    setBusy(classId);
+    setMsg("");
+    try {
+      const r = await repo.enrollClass(classId, memberId);
+      if (r === "full") setMsg("정원이 가득 찼습니다.");
+      else if (r === "already") setMsg("이미 신청한 수업입니다.");
+      else if (r === "not_member") setMsg("신청할 수 없습니다.");
+      await onChanged();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancel(classId: string) {
+    setBusy(classId);
+    try {
+      await repo.cancelEnrollment(classId, memberId);
+      await onChanged();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (upcoming.length === 0)
+    return (
+      <p className="text-[13px] text-faintest">예정된 그룹 수업이 없습니다.</p>
+    );
+
+  return (
+    <div className="space-y-2.5">
+      {msg && (
+        <p className="rounded-lg bg-[#FBF3E1] px-3 py-2 text-[12.5px] font-semibold text-[#8A6A2A]">
+          {msg}
+        </p>
+      )}
+      {upcoming.map((c) => {
+        const remain = c.capacity - c.enrolledCount;
+        const full = remain <= 0;
+        const d = new Date(c.startsAt);
+        return (
+          <div
+            key={c.id}
+            className="rounded-2xl border border-line-soft bg-white p-4"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[15px] font-bold">{c.title}</div>
+                <div className="num mt-0.5 text-[12.5px] text-muted">
+                  {d.getMonth() + 1}/{d.getDate()} {hm(d)}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="num text-[15px] font-bold text-clay">
+                  {c.enrolledCount}/{c.capacity}
+                </div>
+                <div className="text-[11px] text-faintest">
+                  {c.enrolledByMe ? "신청함" : full ? "마감" : `${remain}자리`}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3">
+              {c.enrolledByMe ? (
+                <button
+                  onClick={() => cancel(c.id)}
+                  disabled={busy === c.id}
+                  className="w-full rounded-[10px] border border-line bg-white py-2.5 text-[13px] font-bold text-muted disabled:opacity-50"
+                >
+                  신청 취소
+                </button>
+              ) : (
+                <button
+                  onClick={() => join(c.id)}
+                  disabled={busy === c.id || full}
+                  className="w-full rounded-[10px] bg-clay py-2.5 text-[13px] font-bold text-white disabled:opacity-40"
+                >
+                  {full ? "마감됨" : busy === c.id ? "신청 중…" : "신청 (선착순)"}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

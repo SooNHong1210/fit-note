@@ -87,6 +87,47 @@ drop policy if exists bookings_member_insert on bookings;
 create policy bookings_member_insert on bookings for insert to authenticated
   with check (member_id in (select my_member_ids()));
 
+-- 그룹 수업: 회원이 자기 예약 등록행만 삭제(취소). 조회·등록은 아래 RPC로.
+drop policy if exists enrollments_member_delete on enrollments;
+create policy enrollments_member_delete on enrollments for delete to authenticated
+  using (member_id in (select my_member_ids()));
+
+-- 회원용 클래스 목록: 정원/등록수/내 등록여부 (다른 회원 등록행은 노출 안 함)
+create or replace function list_classes_for_member()
+  returns table(id uuid, title text, starts_at timestamptz, ends_at timestamptz,
+                capacity int, enrolled_count bigint, enrolled_by_me boolean)
+  language sql security definer set search_path = public as $$
+    select c.id, c.title, c.starts_at, c.ends_at, c.capacity,
+      (select count(*) from enrollments e where e.class_id = c.id),
+      exists(select 1 from enrollments e2 join members m on m.id = e2.member_id
+             where e2.class_id = c.id and m.auth_user_id = auth.uid())
+    from group_classes c
+    where c.shop_id in (select shop_id from members where auth_user_id = auth.uid())
+    order by c.starts_at;
+  $$;
+grant execute on function list_classes_for_member() to anon, authenticated;
+
+-- 선착순 등록(정원 초과 방지: 행 잠금으로 직렬화)
+create or replace function enroll_class(p_class_id uuid) returns text
+  language plpgsql security definer set search_path = public as $$
+declare v_shop uuid; v_cap int; v_member uuid; v_count int;
+begin
+  select shop_id, capacity into v_shop, v_cap from group_classes where id = p_class_id;
+  if v_shop is null then return 'not_member'; end if;
+  select id into v_member from members
+    where auth_user_id = auth.uid() and shop_id = v_shop limit 1;
+  if v_member is null then return 'not_member'; end if;
+  if exists(select 1 from enrollments where class_id = p_class_id and member_id = v_member)
+    then return 'already'; end if;
+  perform 1 from group_classes where id = p_class_id for update;
+  select count(*) into v_count from enrollments where class_id = p_class_id;
+  if v_count >= v_cap then return 'full'; end if;
+  insert into enrollments(shop_id, class_id, member_id) values (v_shop, p_class_id, v_member);
+  return 'ok';
+exception when unique_violation then return 'already';
+end $$;
+grant execute on function enroll_class(uuid) to anon, authenticated;
+
 -- NOTE: shops 는 schema.sql 의 public read 유지(가입 코드 조회용).
 -- 잔여 노출: 회원은 같은 샵의 다른 예약/수업 '시간'과 member_id 를 볼 수 있음
 --   (슬롯 마감 표시에 필요). 이름 등은 노출 안 됨. 더 줄이려면 슬롯 계산을 RPC로.

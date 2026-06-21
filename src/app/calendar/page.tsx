@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getRepository } from "@/lib/repositories";
-import type { Lesson, Member } from "@/lib/types";
+import type { ClassWithCount, Lesson, Member } from "@/lib/types";
 import { nextPassUsedOnDone } from "@/lib/pass";
 import {
   addDays,
@@ -28,6 +28,7 @@ export default function CalendarPage() {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [classes, setClasses] = useState<ClassWithCount[]>([]);
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
 
   const gridStart = useMemo(() => calendarGridStart(month), [month]);
@@ -39,12 +40,14 @@ export default function CalendarPage() {
   async function refresh() {
     const from = gridStart.toISOString();
     const to = addDays(gridStart, 42).toISOString();
-    const [ls, ms] = await Promise.all([
+    const [ls, ms, cs] = await Promise.all([
       repo.listLessons({ from, to }),
       repo.listMembers(),
+      repo.listClasses({ from, to }),
     ]);
     setLessons(ls);
     setMembers(ms);
+    setClasses(cs);
   }
 
   useEffect(() => {
@@ -58,6 +61,11 @@ export default function CalendarPage() {
   const lessonsByDay = (day: Date) =>
     lessons
       .filter((l) => sameDay(new Date(l.startsAt), day))
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+
+  const classesByDay = (day: Date) =>
+    classes
+      .filter((c) => sameDay(new Date(c.startsAt), day))
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
   const today = new Date();
@@ -122,6 +130,7 @@ export default function CalendarPage() {
             {days.map((day) => {
               const inMonth = day.getMonth() === month.getMonth();
               const dayLessons = lessonsByDay(day);
+              const dayClasses = classesByDay(day);
               const isSel = sameDay(day, selectedDay);
               return (
                 <button
@@ -148,6 +157,22 @@ export default function CalendarPage() {
                       </span>
                     )}
                   </div>
+                  {dayClasses.slice(0, 2).map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-1 rounded-[5px] bg-[#F3E7DC] px-1.5 py-0.5"
+                    >
+                      <span className="num flex-shrink-0 text-[10px] text-clay-deep">
+                        {hm(new Date(c.startsAt))}
+                      </span>
+                      <span className="truncate text-[11px] font-bold text-clay-dark">
+                        {c.title}
+                      </span>
+                      <span className="num ml-auto flex-shrink-0 text-[9.5px] text-clay-deep">
+                        {c.enrolledCount}/{c.capacity}
+                      </span>
+                    </div>
+                  ))}
                   {dayLessons.slice(0, 2).map((l) => (
                     <div
                       key={l.id}
@@ -166,9 +191,9 @@ export default function CalendarPage() {
                       </span>
                     </div>
                   ))}
-                  {dayLessons.length > 2 && (
+                  {dayLessons.length + dayClasses.length > 4 && (
                     <div className="pl-1.5 text-[10.5px] font-semibold text-faint">
-                      +{dayLessons.length - 2}건 더
+                      +{dayLessons.length + dayClasses.length - 4}건 더
                     </div>
                   )}
                 </button>
@@ -181,6 +206,7 @@ export default function CalendarPage() {
         <DayPanel
           day={selectedDay}
           lessons={lessonsByDay(selectedDay)}
+          classes={classesByDay(selectedDay)}
           members={members}
           memberName={memberName}
           onChanged={refresh}
@@ -193,12 +219,14 @@ export default function CalendarPage() {
 function DayPanel({
   day,
   lessons,
+  classes,
   members,
   memberName,
   onChanged,
 }: {
   day: Date;
   lessons: Lesson[];
+  classes: ClassWithCount[];
   members: Member[];
   memberName: (id: string) => string;
   onChanged: () => void;
@@ -209,6 +237,15 @@ function DayPanel({
   const [memberId, setMemberId] = useState("");
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState(50);
+
+  // 그룹 수업
+  const [addingClass, setAddingClass] = useState(false);
+  const [cTitle, setCTitle] = useState("");
+  const [cTime, setCTime] = useState("10:00");
+  const [cDuration, setCDuration] = useState(50);
+  const [cCapacity, setCCapacity] = useState(8);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [roster, setRoster] = useState<Member[]>([]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -221,6 +258,33 @@ function DayPanel({
     setMemberId("");
     setAdding(false);
     onChanged();
+  }
+
+  async function addClass(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cTitle.trim() || cCapacity < 1) return;
+    const startsAt = toISO(ymd(day), cTime);
+    const endsAt = new Date(
+      new Date(startsAt).getTime() + cDuration * 60000,
+    ).toISOString();
+    await repo.createClass({
+      title: cTitle.trim(),
+      startsAt,
+      endsAt,
+      capacity: cCapacity,
+    });
+    setCTitle("");
+    setAddingClass(false);
+    onChanged();
+  }
+
+  async function toggleRoster(classId: string) {
+    if (expanded === classId) {
+      setExpanded(null);
+      return;
+    }
+    setRoster(await repo.listEnrolledMembers(classId));
+    setExpanded(classId);
   }
 
   async function setStatus(l: Lesson, status: Lesson["status"]) {
@@ -399,6 +463,120 @@ function DayPanel({
             + 이 날짜에 수업 추가
           </button>
         )}
+
+        {/* 그룹 수업 */}
+        <div className="mt-2 border-t border-line-soft pt-3">
+          <div className="mb-2 text-[12.5px] font-bold text-clay-deep">
+            그룹 수업 (선착순)
+          </div>
+          {classes.map((c) => (
+            <div
+              key={c.id}
+              className="mb-2 rounded-xl border border-line-warm bg-[#FBF3EB] p-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="num text-[13px] font-semibold text-clay-deep">
+                    {hm(new Date(c.startsAt))}
+                  </span>
+                  <span className="text-[14px] font-bold text-clay-dark">
+                    {c.title}
+                  </span>
+                </div>
+                <span className="num text-[13px] font-bold text-clay">
+                  {c.enrolledCount}/{c.capacity}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  onClick={() => toggleRoster(c.id)}
+                  className="rounded-lg border border-[#E0CBB4] bg-white px-2.5 py-1 text-[12px] font-semibold text-clay-deep"
+                >
+                  {expanded === c.id ? "명단 닫기" : "명단"}
+                </button>
+                <button
+                  onClick={async () => {
+                    await repo.deleteClass(c.id);
+                    if (expanded === c.id) setExpanded(null);
+                    onChanged();
+                  }}
+                  className="ml-auto text-[12px] font-semibold text-canceled hover:underline"
+                >
+                  삭제
+                </button>
+              </div>
+              {expanded === c.id && (
+                <div className="mt-2 border-t border-[#EAD9C7] pt-2 text-[12.5px] text-ink-soft">
+                  {roster.length === 0 ? (
+                    <span className="text-faintest">등록한 회원이 없습니다.</span>
+                  ) : (
+                    roster.map((m) => m.name).join(", ")
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {addingClass ? (
+            <form
+              onSubmit={addClass}
+              className="space-y-2 rounded-xl border border-line-warm bg-white p-3.5"
+            >
+              <input
+                autoFocus
+                value={cTitle}
+                onChange={(e) => setCTitle(e.target.value)}
+                placeholder="수업 이름 (예: 모닝 요가)"
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="time"
+                  value={cTime}
+                  onChange={(e) => setCTime(e.target.value)}
+                  className="num flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                />
+                <select
+                  value={cDuration}
+                  onChange={(e) => setCDuration(Number(e.target.value))}
+                  className="num rounded-lg border border-line bg-surface px-2 py-2 text-sm"
+                >
+                  {[30, 50, 60, 90].map((d) => (
+                    <option key={d} value={d}>
+                      {d}분
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[12.5px] text-muted">정원</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={cCapacity}
+                  onChange={(e) =>
+                    setCCapacity(Math.max(1, Number(e.target.value) || 1))
+                  }
+                  className="num w-20 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                />
+                <span className="text-[12.5px] text-muted">명</span>
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-clay py-2 text-sm font-bold text-white"
+              >
+                수업 만들기
+              </button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setAddingClass(true)}
+              className="w-full rounded-[10px] border-[1.5px] border-dashed border-[#E0CBB4] py-2.5 text-[13px] font-semibold text-clay-deep"
+            >
+              + 그룹 수업 만들기
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

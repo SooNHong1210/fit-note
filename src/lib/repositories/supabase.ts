@@ -7,12 +7,17 @@ import { normalizeSlug } from "@/lib/slug";
 import type {
   Availability,
   Booking,
+  ClassWithCount,
   Comment,
+  EnrollResult,
+  GroupClass,
   Lesson,
   Member,
+  MemberClassView,
   NewAvailability,
   NewBooking,
   NewComment,
+  NewGroupClass,
   NewLesson,
   NewMember,
   Shop,
@@ -109,6 +114,25 @@ const toAvailability = (r: AvailabilityRow): Availability => ({
   startTime: r.start_time,
   endTime: r.end_time,
 });
+type GroupClassRow = {
+  id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  capacity: number;
+  created_at: string;
+  enrollments?: { count: number }[];
+};
+const toClass = (r: GroupClassRow): ClassWithCount => ({
+  id: r.id,
+  title: r.title,
+  startsAt: r.starts_at,
+  endsAt: r.ends_at,
+  capacity: r.capacity,
+  createdAt: r.created_at,
+  enrolledCount: r.enrollments?.[0]?.count ?? 0,
+});
+
 const toBooking = (r: BookingRow): Booking => ({
   id: r.id,
   memberId: r.member_id,
@@ -523,6 +547,102 @@ export class SupabaseRepository implements Repository {
       .update({ status: "seen" })
       .eq("shop_id", this.sid())
       .eq("status", "requested");
+    if (error) throw error;
+  }
+
+  // ---- 그룹 수업 ----
+  async listClasses(range?: {
+    from: string;
+    to: string;
+  }): Promise<ClassWithCount[]> {
+    if (!this.hasShop()) return [];
+    let q = getSupabase()
+      .from("group_classes")
+      .select("*, enrollments(count)")
+      .eq("shop_id", this.sid())
+      .order("starts_at");
+    if (range) q = q.gte("starts_at", range.from).lt("starts_at", range.to);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data as GroupClassRow[]).map(toClass);
+  }
+
+  async createClass(input: NewGroupClass): Promise<ClassWithCount> {
+    const { data, error } = await getSupabase()
+      .from("group_classes")
+      .insert({
+        shop_id: this.sid(),
+        title: input.title,
+        starts_at: input.startsAt,
+        ends_at: input.endsAt,
+        capacity: input.capacity,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toClass(data as GroupClassRow);
+  }
+
+  async deleteClass(id: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from("group_classes")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+  }
+
+  async listEnrolledMembers(classId: string): Promise<Member[]> {
+    const { data, error } = await getSupabase()
+      .from("enrollments")
+      .select("members(*)")
+      .eq("class_id", classId);
+    if (error) throw error;
+    return (data as unknown as { members: MemberRow }[])
+      .map((r) => r.members)
+      .filter(Boolean)
+      .map(toMember);
+  }
+
+  async listClassesForMember(): Promise<MemberClassView[]> {
+    if (!this.hasShop()) return [];
+    const { data, error } = await getSupabase().rpc("list_classes_for_member");
+    if (error) throw error;
+    return (
+      data as {
+        id: string;
+        title: string;
+        starts_at: string;
+        ends_at: string;
+        capacity: number;
+        enrolled_count: number;
+        enrolled_by_me: boolean;
+      }[]
+    ).map((r) => ({
+      id: r.id,
+      title: r.title,
+      startsAt: r.starts_at,
+      endsAt: r.ends_at,
+      capacity: r.capacity,
+      createdAt: "",
+      enrolledCount: Number(r.enrolled_count),
+      enrolledByMe: r.enrolled_by_me,
+    }));
+  }
+
+  async enrollClass(classId: string): Promise<EnrollResult> {
+    const { data, error } = await getSupabase().rpc("enroll_class", {
+      p_class_id: classId,
+    });
+    if (error) throw error;
+    return data as EnrollResult;
+  }
+
+  async cancelEnrollment(classId: string, memberId: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from("enrollments")
+      .delete()
+      .eq("class_id", classId)
+      .eq("member_id", memberId);
     if (error) throw error;
   }
 }

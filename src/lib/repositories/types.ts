@@ -5,12 +5,16 @@
 import type {
   Availability,
   Booking,
+  ClassWithCount,
   Comment,
+  EnrollResult,
   Lesson,
   Member,
+  MemberClassView,
   NewAvailability,
   NewBooking,
   NewComment,
+  NewGroupClass,
   NewLesson,
   NewMember,
   Shop,
@@ -77,4 +81,13 @@ export interface Repository {
   ): Promise<Booking>;
   // 인박스 열람 시 requested → seen 일괄 처리
   markRequestedSeen(): Promise<void>;
+
+  // 그룹 수업 (정원제, 선착순)
+  listClasses(range?: { from: string; to: string }): Promise<ClassWithCount[]>; // 선생님
+  createClass(input: NewGroupClass): Promise<ClassWithCount>;
+  deleteClass(id: string): Promise<void>;
+  listEnrolledMembers(classId: string): Promise<Member[]>; // 선생님: 등록 명단
+  listClassesForMember(memberId: string): Promise<MemberClassView[]>; // 회원
+  enrollClass(classId: string, memberId: string): Promise<EnrollResult>; // 선착순 등록
+  cancelEnrollment(classId: string, memberId: string): Promise<void>;
 }

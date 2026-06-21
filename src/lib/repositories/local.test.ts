@@ -126,6 +126,61 @@ describe("예약 상태 흐름", () => {
   });
 });
 
+describe("그룹 수업 선착순 등록", () => {
+  async function makeClass(capacity: number) {
+    const r = repo();
+    const c = await r.createClass({
+      title: "요가",
+      startsAt: new Date(2026, 0, 10, 10).toISOString(),
+      endsAt: new Date(2026, 0, 10, 11).toISOString(),
+      capacity,
+    });
+    return c.id;
+  }
+
+  it("정원까지 등록되고 초과 시 full", async () => {
+    const r = repo();
+    const classId = await makeClass(2);
+    const a = await r.createMember({ name: "가" });
+    const b = await r.createMember({ name: "나" });
+    const c = await r.createMember({ name: "다" });
+    expect(await r.enrollClass(classId, a.id)).toBe("ok");
+    expect(await r.enrollClass(classId, b.id)).toBe("ok");
+    expect(await r.enrollClass(classId, c.id)).toBe("full");
+  });
+
+  it("같은 회원 중복 등록은 already", async () => {
+    const r = repo();
+    const classId = await makeClass(5);
+    const a = await r.createMember({ name: "가" });
+    expect(await r.enrollClass(classId, a.id)).toBe("ok");
+    expect(await r.enrollClass(classId, a.id)).toBe("already");
+  });
+
+  it("취소하면 자리가 다시 생긴다", async () => {
+    const r = repo();
+    const classId = await makeClass(1);
+    const a = await r.createMember({ name: "가" });
+    const b = await r.createMember({ name: "나" });
+    expect(await r.enrollClass(classId, a.id)).toBe("ok");
+    expect(await r.enrollClass(classId, b.id)).toBe("full");
+    await r.cancelEnrollment(classId, a.id);
+    expect(await r.enrollClass(classId, b.id)).toBe("ok");
+  });
+
+  it("listClassesForMember 는 등록수/내 등록 여부 반영", async () => {
+    const r = repo();
+    const classId = await makeClass(3);
+    const a = await r.createMember({ name: "가" });
+    await r.enrollClass(classId, a.id);
+    const view = (await r.listClassesForMember(a.id)).find(
+      (c) => c.id === classId,
+    );
+    expect(view?.enrolledCount).toBe(1);
+    expect(view?.enrolledByMe).toBe(true);
+  });
+});
+
 describe("회원권 업데이트", () => {
   it("passTotal/passUsed 수정", async () => {
     const r = repo();

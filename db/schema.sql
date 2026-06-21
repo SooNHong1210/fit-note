@@ -96,6 +96,30 @@ create table if not exists bookings (
 );
 create index if not exists bookings_shop_idx on bookings(shop_id);
 
+-- 그룹 수업 (정원제, 선착순 자동 등록)
+create table if not exists group_classes (
+  id          uuid primary key default gen_random_uuid(),
+  shop_id     uuid not null references shops(id) on delete cascade,
+  title       text not null,
+  starts_at   timestamptz not null,
+  ends_at     timestamptz not null,
+  capacity    integer not null check (capacity > 0),
+  created_at  timestamptz not null default now()
+);
+create index if not exists group_classes_shop_idx on group_classes(shop_id);
+
+-- 수업 등록 (회원-클래스 연결). (class_id, member_id) 유니크로 중복 방지.
+create table if not exists enrollments (
+  id          uuid primary key default gen_random_uuid(),
+  shop_id     uuid not null references shops(id) on delete cascade,
+  class_id    uuid not null references group_classes(id) on delete cascade,
+  member_id   uuid not null references members(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  unique (class_id, member_id)
+);
+create index if not exists enrollments_class_idx on enrollments(class_id);
+create index if not exists enrollments_member_idx on enrollments(member_id);
+
 -- 웹푸시 구독 (선생님 기기별). 선생님이 "알림 받기" 시 저장.
 create table if not exists push_subscriptions (
   id          uuid primary key default gen_random_uuid(),
@@ -120,6 +144,8 @@ alter table availability enable row level security;
 alter table bookings enable row level security;
 alter table trainers enable row level security;
 alter table push_subscriptions enable row level security;
+alter table group_classes enable row level security;
+alter table enrollments enable row level security;
 
 -- 샵: 소유자는 전체, 코드 조회를 위해 읽기는 공개(이름·코드 노출 수준)
 drop policy if exists shops_owner_all on shops;
@@ -133,7 +159,7 @@ create policy shops_public_read on shops for select using (true);
 do $$
 declare t text;
 begin
-  foreach t in array array['members','lessons','comments','availability','bookings','trainers','push_subscriptions']
+  foreach t in array array['members','lessons','comments','availability','bookings','trainers','push_subscriptions','group_classes','enrollments']
   loop
     execute format('drop policy if exists %1$s_owner_all on %1$s;', t);
     execute format($f$
