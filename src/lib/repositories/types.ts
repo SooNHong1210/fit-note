@@ -87,6 +87,8 @@ export interface Repository {
     id: string,
     status: Booking["status"],
   ): Promise<Booking>;
+  // 회원 취소(승인된 예약이면 대응 수업도 취소)
+  cancelBooking(bookingId: string): Promise<void>;
   // 인박스 열람 시 requested → seen 일괄 처리
   markRequestedSeen(): Promise<void>;
 

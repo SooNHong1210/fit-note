@@ -4,8 +4,13 @@
 
 export type LessonStatus = "scheduled" | "done" | "canceled";
 
-// 예약 상태 가시화 4단계 (SPEC 4.2)
-export type BookingStatus = "requested" | "seen" | "approved" | "rejected";
+// 예약 상태 (canceled = 회원 취소)
+export type BookingStatus =
+  | "requested"
+  | "seen"
+  | "approved"
+  | "rejected"
+  | "canceled";
 
 // 회원 연결 상태: invited(선생님이 등록만, 기기 미연결) / active(기기 연결됨)
 export type MemberStatus = "invited" | "active";

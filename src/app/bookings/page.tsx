@@ -11,6 +11,7 @@ const PILL = {
   seen: { label: "확인 중", color: "#3F6CB0", chip: "#ECF1F8" },
   approved: { label: "승인됨", color: "#3E7D5A", chip: "#EAF3ED" },
   rejected: { label: "거절됨", color: "#9A938A", chip: "#EFEBE2" },
+  canceled: { label: "취소됨", color: "#9A938A", chip: "#EFEBE2" },
 } as const;
 
 export default function BookingsPage() {
@@ -69,7 +70,10 @@ export default function BookingsPage() {
     (b) => b.status === "requested" || b.status === "seen",
   );
   const done = bookings.filter(
-    (b) => b.status === "approved" || b.status === "rejected",
+    (b) =>
+      b.status === "approved" ||
+      b.status === "rejected" ||
+      b.status === "canceled",
   );
 
   return (

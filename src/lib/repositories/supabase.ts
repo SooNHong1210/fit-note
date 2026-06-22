@@ -625,6 +625,13 @@ export class SupabaseRepository implements Repository {
     if (error) throw error;
   }
 
+  async cancelBooking(bookingId: string): Promise<void> {
+    const { error } = await getSupabase().rpc("cancel_booking", {
+      p_booking_id: bookingId,
+    });
+    if (error) throw error;
+  }
+
   // ---- 그룹 수업 ----
   async listClasses(range?: {
     from: string;

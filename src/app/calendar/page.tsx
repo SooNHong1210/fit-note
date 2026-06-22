@@ -244,6 +244,7 @@ function DayPanel({
   const [time, setTime] = useState("10:00");
   const [duration, setDuration] = useState(50);
   const [lTrainer, setLTrainer] = useState("");
+  const [lRepeat, setLRepeat] = useState(1);
 
   // 그룹 수업
   const [addingClass, setAddingClass] = useState(false);
@@ -252,6 +253,7 @@ function DayPanel({
   const [cDuration, setCDuration] = useState(50);
   const [cCapacity, setCCapacity] = useState(8);
   const [cTrainer, setCTrainer] = useState("");
+  const [cRepeat, setCRepeat] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [roster, setRoster] = useState<Member[]>([]);
 
@@ -261,17 +263,20 @@ function DayPanel({
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!memberId) return;
-    const startsAt = toISO(ymd(day), time);
-    const endsAt = new Date(
-      new Date(startsAt).getTime() + duration * 60000,
-    ).toISOString();
-    await repo.createLesson({
-      memberId,
-      trainerId: lTrainer || undefined,
-      startsAt,
-      endsAt,
-    });
+    for (let i = 0; i < lRepeat; i++) {
+      const startsAt = toISO(ymd(addDays(day, 7 * i)), time);
+      const endsAt = new Date(
+        new Date(startsAt).getTime() + duration * 60000,
+      ).toISOString();
+      await repo.createLesson({
+        memberId,
+        trainerId: lTrainer || undefined,
+        startsAt,
+        endsAt,
+      });
+    }
     setMemberId("");
+    setLRepeat(1);
     setAdding(false);
     onChanged();
   }
@@ -279,18 +284,21 @@ function DayPanel({
   async function addClass(e: React.FormEvent) {
     e.preventDefault();
     if (!cTitle.trim() || cCapacity < 1) return;
-    const startsAt = toISO(ymd(day), cTime);
-    const endsAt = new Date(
-      new Date(startsAt).getTime() + cDuration * 60000,
-    ).toISOString();
-    await repo.createClass({
-      title: cTitle.trim(),
-      trainerId: cTrainer || undefined,
-      startsAt,
-      endsAt,
-      capacity: cCapacity,
-    });
+    for (let i = 0; i < cRepeat; i++) {
+      const startsAt = toISO(ymd(addDays(day, 7 * i)), cTime);
+      const endsAt = new Date(
+        new Date(startsAt).getTime() + cDuration * 60000,
+      ).toISOString();
+      await repo.createClass({
+        title: cTitle.trim(),
+        trainerId: cTrainer || undefined,
+        startsAt,
+        endsAt,
+        capacity: cCapacity,
+      });
+    }
     setCTitle("");
+    setCRepeat(1);
     setAddingClass(false);
     onChanged();
   }
@@ -548,11 +556,21 @@ function DayPanel({
                   ))}
                 </select>
               </div>
+              <select
+                value={lRepeat}
+                onChange={(e) => setLRepeat(Number(e.target.value))}
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              >
+                <option value={1}>반복 없음</option>
+                <option value={4}>매주 · 4주</option>
+                <option value={8}>매주 · 8주</option>
+                <option value={12}>매주 · 12주</option>
+              </select>
               <button
                 type="submit"
                 className="w-full rounded-lg bg-clay py-2 text-sm font-bold text-white"
               >
-                추가
+                {lRepeat > 1 ? `${lRepeat}주 반복 추가` : "추가"}
               </button>
             </form>
           )
@@ -681,11 +699,21 @@ function DayPanel({
                 />
                 <span className="text-[12.5px] text-muted">명</span>
               </div>
+              <select
+                value={cRepeat}
+                onChange={(e) => setCRepeat(Number(e.target.value))}
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              >
+                <option value={1}>반복 없음</option>
+                <option value={4}>매주 · 4주</option>
+                <option value={8}>매주 · 8주</option>
+                <option value={12}>매주 · 12주</option>
+              </select>
               <button
                 type="submit"
                 className="w-full rounded-lg bg-clay py-2 text-sm font-bold text-white"
               >
-                수업 만들기
+                {cRepeat > 1 ? `${cRepeat}주 반복 만들기` : "수업 만들기"}
               </button>
             </form>
           ) : (

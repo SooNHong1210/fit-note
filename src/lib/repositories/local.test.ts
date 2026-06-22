@@ -113,6 +113,30 @@ describe("예약 상태 흐름", () => {
     expect(seen?.status).toBe("seen"); // requested → seen
   });
 
+  it("회원 취소: 승인된 예약이면 대응 수업도 취소", async () => {
+    const r = repo();
+    const m = await r.createMember({ name: "홍길동" });
+    const start = new Date(2026, 0, 6, 10).toISOString();
+    const b = await r.createBooking({
+      memberId: m.id,
+      slotStartsAt: start,
+      slotEndsAt: new Date(2026, 0, 6, 11).toISOString(),
+    });
+    await r.createLesson({
+      memberId: m.id,
+      startsAt: start,
+      endsAt: new Date(2026, 0, 6, 11).toISOString(),
+    });
+    await r.updateBookingStatus(b.id, "approved");
+
+    await r.cancelBooking(b.id);
+
+    const bookings = await r.listBookingsByMember(m.id);
+    expect(bookings.find((x) => x.id === b.id)?.status).toBe("canceled");
+    const lessons = await r.listLessonsByMember(m.id);
+    expect(lessons[0].status).toBe("canceled");
+  });
+
   it("승인/거절 시 respondedAt 기록", async () => {
     const r = repo();
     const m = await r.createMember({ name: "홍길동" });

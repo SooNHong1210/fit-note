@@ -395,7 +395,12 @@ function MemberHome({
           onChanged={refresh}
         />
       ) : (
-        <StatusTab member={me} bookings={myBookings} comments={comments} />
+        <StatusTab
+          member={me}
+          bookings={myBookings}
+          comments={comments}
+          onChanged={refresh}
+        />
       )}
     </div>
   );
@@ -765,10 +770,12 @@ function StatusTab({
   member,
   bookings,
   comments,
+  onChanged,
 }: {
   member: Member;
   bookings: Booking[];
   comments: Comment[];
+  onChanged: () => void;
 }) {
   const remain = passRemaining(member);
   const remainPct = member.passTotal > 0 ? (remain / member.passTotal) * 100 : 0;
@@ -807,7 +814,7 @@ function StatusTab({
         ) : (
           <div className="flex flex-col gap-2.5">
             {bookings.map((b) => (
-              <BookingCard key={b.id} booking={b} />
+              <BookingCard key={b.id} booking={b} onChanged={onChanged} />
             ))}
           </div>
         )}
@@ -843,7 +850,15 @@ function StatusTab({
 
 const STEPS = ["신청됨", "확인 중", "결과"];
 
-function BookingCard({ booking }: { booking: Booking }) {
+function BookingCard({
+  booking,
+  onChanged,
+}: {
+  booking: Booking;
+  onChanged: () => void;
+}) {
+  const repo = getRepository();
+  const [busy, setBusy] = useState(false);
   const idx =
     booking.status === "requested"
       ? 0
@@ -852,8 +867,27 @@ function BookingCard({ booking }: { booking: Booking }) {
         : 2;
   const rejected = booking.status === "rejected";
   const approved = booking.status === "approved";
-  const activeColor = rejected ? "#B25148" : approved ? "#3E7D5A" : "#AE6A43";
+  const canceled = booking.status === "canceled";
+  const inactive = rejected || canceled;
+  const activeColor = inactive ? "#9A938A" : approved ? "#3E7D5A" : "#AE6A43";
   const d = new Date(booking.slotStartsAt);
+  const upcoming = d.getTime() > Date.now();
+  const cancellable =
+    upcoming &&
+    (booking.status === "requested" ||
+      booking.status === "seen" ||
+      booking.status === "approved");
+
+  async function cancel() {
+    if (!confirm("이 예약을 취소할까요?")) return;
+    setBusy(true);
+    try {
+      await repo.cancelBooking(booking.id);
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-line-soft bg-white p-4">
@@ -864,24 +898,33 @@ function BookingCard({ booking }: { booking: Booking }) {
         <span
           className="rounded-full px-2.5 py-0.5 text-[11.5px] font-bold"
           style={{
-            background: rejected ? "#F8ECEA" : approved ? "#EAF3ED" : "#FBF3E1",
+            background: inactive ? "#EFEBE2" : approved ? "#EAF3ED" : "#FBF3E1",
             color: activeColor,
           }}
         >
-          {rejected
-            ? "거절됨"
-            : approved
-              ? "승인됨"
-              : booking.status === "seen"
-                ? "확인 중"
-                : "신청됨"}
+          {canceled
+            ? "취소됨"
+            : rejected
+              ? "거절됨"
+              : approved
+                ? "승인됨"
+                : booking.status === "seen"
+                  ? "확인 중"
+                  : "신청됨"}
         </span>
       </div>
       <div className="flex items-center">
         {STEPS.map((label, i) => {
           const reached = i <= idx;
           const last = i === STEPS.length - 1;
-          const stepLabel = last && rejected ? "거절" : last && approved ? "승인" : label;
+          const stepLabel =
+            last && canceled
+              ? "취소"
+              : last && rejected
+                ? "거절"
+                : last && approved
+                  ? "승인"
+                  : label;
           return (
             <div key={i} className="flex flex-1 items-center last:flex-none">
               <div className="flex flex-col items-center gap-1">
@@ -906,6 +949,15 @@ function BookingCard({ booking }: { booking: Booking }) {
           );
         })}
       </div>
+      {cancellable && (
+        <button
+          onClick={cancel}
+          disabled={busy}
+          className="mt-3 w-full rounded-[10px] border border-line bg-white py-2 text-[12.5px] font-bold text-canceled disabled:opacity-50"
+        >
+          {busy ? "취소 중…" : "예약 취소"}
+        </button>
+      )}
     </div>
   );
 }

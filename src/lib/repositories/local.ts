@@ -442,6 +442,25 @@ export class LocalRepository implements Repository {
     if (changed) this.save(p);
   }
 
+  async cancelBooking(bookingId: string): Promise<void> {
+    const p = this.load();
+    const b = p.bookings.find((x) => x.id === bookingId);
+    if (!b) return;
+    if (b.status === "approved") {
+      p.lessons = p.lessons.map((l) =>
+        l.memberId === b.memberId &&
+        l.startsAt === b.slotStartsAt &&
+        l.status === "scheduled"
+          ? { ...l, status: "canceled" }
+          : l,
+      );
+    }
+    p.bookings = p.bookings.map((x) =>
+      x.id === bookingId ? { ...x, status: "canceled" as const } : x,
+    );
+    this.save(p);
+  }
+
   // ---- 그룹 수업 ----
   private withCount(p: Partition, c: GroupClass): ClassWithCount {
     return {
