@@ -37,6 +37,7 @@ import {
 import { getActiveShopId, setActiveShopId } from "@/lib/activeShop";
 import { subscribeBookings } from "@/lib/realtime";
 import { notifyTeacher } from "@/lib/push";
+import MemberPushToggle from "@/components/MemberPushToggle";
 
 export default function MemberPage() {
   const [status, setStatus] = useState<
@@ -782,6 +783,7 @@ function StatusTab({
 
   return (
     <div className="space-y-6">
+      <MemberPushToggle memberId={member.id} />
       {member.passTotal > 0 && (
         <div
           className="rounded-2xl border border-line-warm p-5"

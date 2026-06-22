@@ -29,12 +29,19 @@ export async function POST(req: Request) {
     );
   }
 
-  let shopId: string | undefined;
+  let body: {
+    shopId?: string;
+    memberId?: string;
+    title?: string;
+    body?: string;
+    url?: string;
+  };
   try {
-    shopId = (await req.json()).shopId;
+    body = await req.json();
   } catch {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
+  const shopId = body.shopId;
   if (!shopId) return NextResponse.json({ ok: false }, { status: 400 });
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
@@ -42,17 +49,20 @@ export async function POST(req: Request) {
     auth: { persistSession: false },
   });
 
-  const { data: subs, error } = await admin
+  // memberId 있으면 그 회원 기기, 없으면 선생님 기기(member_id null)
+  let q = admin
     .from("push_subscriptions")
     .select("endpoint, subscription")
     .eq("shop_id", shopId);
+  q = body.memberId ? q.eq("member_id", body.memberId) : q.is("member_id", null);
+  const { data: subs, error } = await q;
   if (error)
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
   const payload = JSON.stringify({
-    title: "새 예약 신청",
-    body: "회원이 예약을 신청했습니다. 인박스에서 확인하세요.",
-    url: "/bookings",
+    title: body.title ?? "새 예약 신청",
+    body: body.body ?? "회원이 예약을 신청했습니다. 인박스에서 확인하세요.",
+    url: body.url ?? "/bookings",
   });
 
   const results = await Promise.allSettled(

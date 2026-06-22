@@ -24,8 +24,8 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   return arr;
 }
 
-// 선생님 기기에서 알림 구독 → DB 저장
-export async function subscribeTeacherPush(shopId: string): Promise<void> {
+// 알림 구독 → DB 저장. memberId 있으면 회원 구독, 없으면 선생님 구독.
+async function subscribe(shopId: string, memberId?: string): Promise<void> {
   if (!pushSupported()) throw new Error("이 환경에서는 알림을 지원하지 않습니다.");
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("알림 권한이 거부되었습니다.");
@@ -46,10 +46,26 @@ export async function subscribeTeacherPush(shopId: string): Promise<void> {
   const { error } = await getSupabase()
     .from("push_subscriptions")
     .upsert(
-      { shop_id: shopId, endpoint: json.endpoint, subscription: json },
+      {
+        shop_id: shopId,
+        member_id: memberId ?? null,
+        endpoint: json.endpoint,
+        subscription: json,
+      },
       { onConflict: "endpoint" },
     );
   if (error) throw error;
+}
+
+export function subscribeTeacherPush(shopId: string): Promise<void> {
+  return subscribe(shopId);
+}
+
+export function subscribeMemberPush(
+  shopId: string,
+  memberId: string,
+): Promise<void> {
+  return subscribe(shopId, memberId);
 }
 
 export async function isPushSubscribed(): Promise<boolean> {
@@ -59,12 +75,33 @@ export async function isPushSubscribed(): Promise<boolean> {
   return !!sub;
 }
 
-// 회원 예약 시 선생님에게 알림 발송 요청 (실패해도 무시)
-export function notifyTeacher(shopId: string): void {
+// 알림 발송 요청 (실패해도 무시). memberId 없으면 선생님 기기들에게.
+function notify(payload: {
+  shopId: string;
+  memberId?: string;
+  title?: string;
+  body?: string;
+  url?: string;
+}): void {
   if (!isSupabaseConfigured) return;
   fetch("/api/push/notify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shopId }),
+    body: JSON.stringify(payload),
   }).catch(() => {});
+}
+
+// 회원 예약 시 선생님에게
+export function notifyTeacher(shopId: string): void {
+  notify({ shopId });
+}
+
+// 선생님이 승인/거절 시 회원에게
+export function notifyMember(
+  shopId: string,
+  memberId: string,
+  title: string,
+  body: string,
+): void {
+  notify({ shopId, memberId, title, body, url: "/m" });
 }

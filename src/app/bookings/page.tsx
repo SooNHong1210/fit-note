@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { getRepository } from "@/lib/repositories";
 import { subscribeBookings } from "@/lib/realtime";
+import { notifyMember } from "@/lib/push";
+import { getActiveShopId } from "@/lib/activeShop";
 import type { Booking, Member } from "@/lib/types";
 import { fmtDate, fmtDateTime } from "@/lib/date";
 
@@ -56,11 +58,27 @@ export default function BookingsPage() {
       endsAt: b.slotEndsAt,
     });
     await repo.updateBookingStatus(b.id, "approved");
+    const sid = getActiveShopId();
+    if (sid)
+      notifyMember(
+        sid,
+        b.memberId,
+        "예약이 승인되었습니다",
+        `${fmtDateTime(b.slotStartsAt)} 예약이 확정되었어요.`,
+      );
     refresh();
   }
 
   async function reject(b: Booking) {
     await repo.updateBookingStatus(b.id, "rejected");
+    const sid = getActiveShopId();
+    if (sid)
+      notifyMember(
+        sid,
+        b.memberId,
+        "예약이 거절되었습니다",
+        `${fmtDateTime(b.slotStartsAt)} 예약 신청이 거절되었어요.`,
+      );
     refresh();
   }
 
