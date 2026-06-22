@@ -380,6 +380,7 @@ function MemberHome({
           sessionMinutes={shop?.sessionMinutes ?? 0}
           lessons={lessons}
           bookings={allBookings}
+          classes={classes}
           trainers={trainers}
           defaultTrainerId={me.trainerId}
           requesting={requesting}
@@ -406,6 +407,7 @@ function BookCalendar({
   sessionMinutes,
   lessons,
   bookings,
+  classes,
   trainers,
   defaultTrainerId,
   requesting,
@@ -418,6 +420,7 @@ function BookCalendar({
   sessionMinutes: number;
   lessons: Lesson[];
   bookings: Booking[];
+  classes: MemberClassView[];
   trainers: Trainer[];
   defaultTrainerId?: string;
   requesting: string | null;
@@ -446,11 +449,15 @@ function BookCalendar({
     const bk = hasTrainers
       ? bookings.filter((b) => !b.trainerId || b.trainerId === trainerId)
       : bookings;
+    const cl = hasTrainers
+      ? classes.filter((c) => !c.trainerId || c.trainerId === trainerId)
+      : classes;
     const slots = computeAvailableSlots({
       availability: av,
       sessionMinutes,
       lessons: ls,
       bookings: bk,
+      classes: cl,
       from: month,
       to: monthEnd,
       now: today,
@@ -467,6 +474,7 @@ function BookCalendar({
     sessionMinutes,
     lessons,
     bookings,
+    classes,
     month,
     today,
     hasTrainers,

@@ -24,6 +24,7 @@ export function computeAvailableSlots(params: {
   sessionMinutes: number;
   lessons: Lesson[];
   bookings: Booking[];
+  classes?: { startsAt: string; endsAt: string }[]; // 그룹 수업(바쁜 시간)
   daysAhead?: number;
   from?: Date; // 명시적 시작일(미지정 시 오늘)
   to?: Date; // 명시적 종료일(미지정 시 시작일+daysAhead)
@@ -34,6 +35,7 @@ export function computeAvailableSlots(params: {
     sessionMinutes,
     lessons,
     bookings,
+    classes = [],
     daysAhead = 14,
     from,
     to,
@@ -42,7 +44,7 @@ export function computeAvailableSlots(params: {
 
   if (availability.length === 0 || sessionMinutes <= 0) return [];
 
-  // 바쁜 구간: 예정된 수업 + 거절되지 않은 예약
+  // 바쁜 구간: 예정된 수업 + 거절되지 않은 예약 + 그룹 수업
   const busy: Interval[] = [
     ...lessons
       .filter((l) => l.status === "scheduled")
@@ -56,6 +58,10 @@ export function computeAvailableSlots(params: {
         start: new Date(b.slotStartsAt).getTime(),
         end: new Date(b.slotEndsAt).getTime(),
       })),
+    ...classes.map((c) => ({
+      start: new Date(c.startsAt).getTime(),
+      end: new Date(c.endsAt).getTime(),
+    })),
   ];
 
   const slots: Slot[] = [];

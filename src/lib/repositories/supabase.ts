@@ -687,6 +687,7 @@ export class SupabaseRepository implements Repository {
       data as {
         id: string;
         title: string;
+        trainer_id: string | null;
         starts_at: string;
         ends_at: string;
         capacity: number;
@@ -696,6 +697,7 @@ export class SupabaseRepository implements Repository {
     ).map((r) => ({
       id: r.id,
       title: r.title,
+      trainerId: r.trainer_id ?? undefined,
       startsAt: r.starts_at,
       endsAt: r.ends_at,
       capacity: r.capacity,

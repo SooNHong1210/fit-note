@@ -107,6 +107,20 @@ describe("computeAvailableSlots", () => {
     expect(new Date(slots[0].startsAt).getHours()).toBe(11);
   });
 
+  it("그룹 수업과 겹치는 슬롯 제외", () => {
+    const slots = computeAvailableSlots({
+      ...base,
+      classes: [
+        {
+          startsAt: new Date(2026, 0, 5, 10).toISOString(),
+          endsAt: new Date(2026, 0, 5, 11).toISOString(),
+        },
+      ],
+    });
+    expect(slots).toHaveLength(1);
+    expect(new Date(slots[0].startsAt).getHours()).toBe(11);
+  });
+
   it("영업시간 없으면 빈 배열", () => {
     expect(
       computeAvailableSlots({ ...base, availability: [] }),
