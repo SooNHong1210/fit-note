@@ -90,15 +90,10 @@ export default function SettingsPage() {
     setRows((r) => r.filter((row) => row.trainerId !== id));
   }
 
-  function addRow() {
+  function addRow(trainerId: string | undefined) {
     setRows((r) => [
       ...r,
-      {
-        trainerId: trainers[0]?.id,
-        weekday: 1,
-        startTime: "10:00",
-        endTime: "18:00",
-      },
+      { trainerId, weekday: 1, startTime: "10:00", endTime: "18:00" },
     ]);
   }
 
@@ -108,6 +103,68 @@ export default function SettingsPage() {
 
   function removeRow(i: number) {
     setRows((r) => r.filter((_, idx) => idx !== i));
+  }
+
+  // 선생님별(또는 공통) 영업시간 그룹
+  function renderGroup(trainerId: string | undefined, title: string | null) {
+    const items = rows
+      .map((row, i) => ({ row, i }))
+      .filter(({ row }) => (row.trainerId ?? undefined) === trainerId);
+    return (
+      <div key={trainerId ?? "common"} className="mb-3.5 last:mb-0">
+        {title && (
+          <div className="mb-1.5 text-[12.5px] font-bold text-clay-deep">
+            {title}
+          </div>
+        )}
+        {items.length > 0 && (
+          <div className="mb-1.5 flex flex-col gap-2">
+            {items.map(({ row, i }) => (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <select
+                  value={row.weekday}
+                  onChange={(e) =>
+                    updateRow(i, { weekday: Number(e.target.value) })
+                  }
+                  className="rounded-lg border border-line bg-surface px-2 py-2"
+                >
+                  {WEEKDAYS_KO.map((w, idx) => (
+                    <option key={idx} value={idx}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="time"
+                  value={row.startTime}
+                  onChange={(e) => updateRow(i, { startTime: e.target.value })}
+                  className="num rounded-lg border border-line bg-surface px-2 py-2"
+                />
+                <span className="text-faint">~</span>
+                <input
+                  type="time"
+                  value={row.endTime}
+                  onChange={(e) => updateRow(i, { endTime: e.target.value })}
+                  className="num rounded-lg border border-line bg-surface px-2 py-2"
+                />
+                <button
+                  onClick={() => removeRow(i)}
+                  className="ml-auto text-[13px] font-semibold text-canceled hover:underline"
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => addRow(trainerId)}
+          className="text-[12.5px] font-semibold text-clay hover:underline"
+        >
+          + 시간대 추가
+        </button>
+      </div>
+    );
   }
 
   async function save() {
@@ -317,75 +374,22 @@ export default function SettingsPage() {
 
       {/* 영업시간 */}
       <div className="rounded-2xl border border-line-soft bg-white p-5">
-        <div className="mb-3.5 flex items-center justify-between">
-          <div className="text-[13px] font-bold text-faint">요일별 영업시간</div>
-          <button
-            onClick={addRow}
-            className="rounded-lg border border-line bg-surface px-2.5 py-1 text-[13px] font-semibold text-ink-soft"
-          >
-            + 시간대 추가
-          </button>
+        <div className="mb-3.5 text-[13px] font-bold text-faint">
+          요일별 영업시간
         </div>
-        {rows.length === 0 ? (
-          <p className="text-[13px] text-faintest">
-            영업시간을 추가하면 회원에게 그 시간대의 빈 슬롯이 노출됩니다.
-          </p>
+        {trainers.length === 0 ? (
+          renderGroup(undefined, null)
         ) : (
-          <div className="flex flex-col gap-2">
-            {rows.map((row, i) => (
-              <div key={i} className="flex flex-wrap items-center gap-2">
-                {trainers.length > 0 && (
-                  <select
-                    value={row.trainerId ?? ""}
-                    onChange={(e) =>
-                      updateRow(i, { trainerId: e.target.value || undefined })
-                    }
-                    className="rounded-lg border border-line bg-surface px-2 py-2 text-[13px]"
-                  >
-                    <option value="">전체</option>
-                    {trainers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <select
-                  value={row.weekday}
-                  onChange={(e) =>
-                    updateRow(i, { weekday: Number(e.target.value) })
-                  }
-                  className="rounded-lg border border-line bg-surface px-2 py-2"
-                >
-                  {WEEKDAYS_KO.map((w, idx) => (
-                    <option key={idx} value={idx}>
-                      {w}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="time"
-                  value={row.startTime}
-                  onChange={(e) => updateRow(i, { startTime: e.target.value })}
-                  className="num rounded-lg border border-line bg-surface px-2 py-2"
-                />
-                <span className="text-faint">~</span>
-                <input
-                  type="time"
-                  value={row.endTime}
-                  onChange={(e) => updateRow(i, { endTime: e.target.value })}
-                  className="num rounded-lg border border-line bg-surface px-2 py-2"
-                />
-                <button
-                  onClick={() => removeRow(i)}
-                  className="ml-auto text-[13px] font-semibold text-canceled hover:underline"
-                >
-                  삭제
-                </button>
-              </div>
-            ))}
-          </div>
+          <>
+            {trainers.map((t) => renderGroup(t.id, t.name))}
+            {renderGroup(undefined, "공통 (모든 선생님)")}
+          </>
         )}
+        <p className="mt-2 text-[11.5px] text-faintest">
+          {trainers.length > 0
+            ? "선생님별로 영업시간을 따로 지정하세요. ‘공통’은 모든 선생님에게 적용됩니다."
+            : "영업시간을 추가하면 회원에게 그 시간대의 빈 슬롯이 노출됩니다."}
+        </p>
       </div>
 
       <button
