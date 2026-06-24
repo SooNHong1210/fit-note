@@ -377,6 +377,14 @@ export class SupabaseRepository implements Repository {
     return this.getMember(data as string);
   }
 
+  async resetMemberDevice(memberId: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from("members")
+      .update({ device_public_key: null, auth_user_id: null, status: "invited" })
+      .eq("id", memberId);
+    if (error) throw error;
+  }
+
   // ---- 수업 ----
   async listLessons(range?: { from: string; to: string }): Promise<Lesson[]> {
     if (!this.hasShop()) return [];

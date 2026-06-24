@@ -243,6 +243,13 @@ export class LocalRepository implements Repository {
     return this.claimMemberDevice(m.id, devicePublicKey);
   }
 
+  async resetMemberDevice(memberId: string): Promise<void> {
+    await this.updateMember(memberId, {
+      devicePublicKey: undefined,
+      status: "invited",
+    });
+  }
+
   // ---- 수업 ----
   async listLessons(range?: { from: string; to: string }): Promise<Lesson[]> {
     if (!this.hasShop()) return [];

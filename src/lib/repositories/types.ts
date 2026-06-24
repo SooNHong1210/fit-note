@@ -42,6 +42,8 @@ export interface Repository {
   ): Promise<Member | null>;
   findMemberByNameBirth(name: string, birthDate: string): Promise<Member | null>;
   claimMemberDevice(memberId: string, publicKey: string): Promise<Member>;
+  // 선생님이 회원 기기 연결 초기화 → 미연결(invited)로, 재인증 필요
+  resetMemberDevice(memberId: string): Promise<void>;
 
   // 수업
   listLessons(range?: { from: string; to: string }): Promise<Lesson[]>;
