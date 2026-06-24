@@ -4,13 +4,14 @@
 
 export type LessonStatus = "scheduled" | "done" | "canceled";
 
-// 예약 상태 (canceled = 회원 취소)
+// 예약 상태 (canceled = 회원 취소, proposed = 선생님이 다른 시간 제안)
 export type BookingStatus =
   | "requested"
   | "seen"
   | "approved"
   | "rejected"
-  | "canceled";
+  | "canceled"
+  | "proposed";
 
 // 회원 연결 상태: invited(선생님이 등록만, 기기 미연결) / active(기기 연결됨)
 export type MemberStatus = "invited" | "active";
@@ -81,6 +82,9 @@ export interface Booking {
   slotStartsAt: string; // ISO
   slotEndsAt: string; // ISO
   status: BookingStatus;
+  teacherNote?: string; // 선생님 메모(거절/제안 사유)
+  proposedStartsAt?: string; // 제안 시간
+  proposedEndsAt?: string;
   createdAt: string;
   respondedAt?: string;
 }

@@ -7,6 +7,7 @@ export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
   approved: "승인됨",
   rejected: "거절됨",
   canceled: "취소됨",
+  proposed: "시간 제안됨",
 };
 
 export const BOOKING_STATUS_CLASS: Record<BookingStatus, string> = {
@@ -15,4 +16,5 @@ export const BOOKING_STATUS_CLASS: Record<BookingStatus, string> = {
   approved: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
   rejected: "bg-black/10 text-black/50 dark:bg-white/10 dark:text-white/50",
   canceled: "bg-black/10 text-black/50 dark:bg-white/10 dark:text-white/50",
+  proposed: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
 };

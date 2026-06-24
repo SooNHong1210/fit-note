@@ -137,6 +137,44 @@ describe("예약 상태 흐름", () => {
     expect(lessons[0].status).toBe("canceled");
   });
 
+  it("다른 시간 제안 → 회원 수락 시 제안 시간으로 확정 + 수업 생성", async () => {
+    const r = repo();
+    const m = await r.createMember({ name: "홍길동" });
+    const b = await r.createBooking({
+      memberId: m.id,
+      slotStartsAt: new Date(2026, 0, 6, 10).toISOString(),
+      slotEndsAt: new Date(2026, 0, 6, 11).toISOString(),
+    });
+    const newStart = new Date(2026, 0, 6, 14).toISOString();
+    const newEnd = new Date(2026, 0, 6, 15).toISOString();
+    await r.proposeBooking(b.id, newStart, newEnd, "오후가 어때요?");
+
+    let bk = (await r.listBookingsByMember(m.id)).find((x) => x.id === b.id);
+    expect(bk?.status).toBe("proposed");
+    expect(bk?.teacherNote).toBe("오후가 어때요?");
+
+    await r.respondProposal(b.id, true);
+    bk = (await r.listBookingsByMember(m.id)).find((x) => x.id === b.id);
+    expect(bk?.status).toBe("approved");
+    expect(bk?.slotStartsAt).toBe(newStart);
+    const lessons = await r.listLessonsByMember(m.id);
+    expect(lessons[0].startsAt).toBe(newStart);
+  });
+
+  it("거절 메모 저장", async () => {
+    const r = repo();
+    const m = await r.createMember({ name: "홍길동" });
+    const b = await r.createBooking({
+      memberId: m.id,
+      slotStartsAt: new Date(2026, 0, 6, 10).toISOString(),
+      slotEndsAt: new Date(2026, 0, 6, 11).toISOString(),
+    });
+    await r.rejectBooking(b.id, "그 시간은 마감입니다");
+    const bk = (await r.listBookingsByMember(m.id)).find((x) => x.id === b.id);
+    expect(bk?.status).toBe("rejected");
+    expect(bk?.teacherNote).toBe("그 시간은 마감입니다");
+  });
+
   it("승인/거절 시 respondedAt 기록", async () => {
     const r = repo();
     const m = await r.createMember({ name: "홍길동" });

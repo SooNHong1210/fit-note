@@ -82,6 +82,9 @@ type BookingRow = {
   slot_starts_at: string;
   slot_ends_at: string;
   status: Booking["status"];
+  teacher_note: string | null;
+  proposed_starts_at: string | null;
+  proposed_ends_at: string | null;
   created_at: string;
   responded_at: string | null;
 };
@@ -163,6 +166,9 @@ const toBooking = (r: BookingRow): Booking => ({
   slotStartsAt: r.slot_starts_at,
   slotEndsAt: r.slot_ends_at,
   status: r.status,
+  teacherNote: r.teacher_note ?? undefined,
+  proposedStartsAt: r.proposed_starts_at ?? undefined,
+  proposedEndsAt: r.proposed_ends_at ?? undefined,
   createdAt: r.created_at,
   respondedAt: r.responded_at ?? undefined,
 });
@@ -636,6 +642,44 @@ export class SupabaseRepository implements Repository {
   async cancelBooking(bookingId: string): Promise<void> {
     const { error } = await getSupabase().rpc("cancel_booking", {
       p_booking_id: bookingId,
+    });
+    if (error) throw error;
+  }
+
+  async rejectBooking(bookingId: string, note?: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from("bookings")
+      .update({
+        status: "rejected",
+        teacher_note: note ?? null,
+        responded_at: new Date().toISOString(),
+      })
+      .eq("id", bookingId);
+    if (error) throw error;
+  }
+
+  async proposeBooking(
+    bookingId: string,
+    startsAt: string,
+    endsAt: string,
+    note?: string,
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from("bookings")
+      .update({
+        status: "proposed",
+        proposed_starts_at: startsAt,
+        proposed_ends_at: endsAt,
+        teacher_note: note ?? null,
+      })
+      .eq("id", bookingId);
+    if (error) throw error;
+  }
+
+  async respondProposal(bookingId: string, accept: boolean): Promise<void> {
+    const { error } = await getSupabase().rpc("respond_proposal", {
+      p_booking_id: bookingId,
+      p_accept: accept,
     });
     if (error) throw error;
   }

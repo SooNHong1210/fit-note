@@ -91,6 +91,16 @@ export interface Repository {
   ): Promise<Booking>;
   // 회원 취소(승인된 예약이면 대응 수업도 취소)
   cancelBooking(bookingId: string): Promise<void>;
+  // 선생님: 거절(메모) / 다른 시간 제안(메모)
+  rejectBooking(bookingId: string, note?: string): Promise<void>;
+  proposeBooking(
+    bookingId: string,
+    startsAt: string,
+    endsAt: string,
+    note?: string,
+  ): Promise<void>;
+  // 회원: 제안 수락/거절 (수락 시 제안 시간 확정 + 수업 생성)
+  respondProposal(bookingId: string, accept: boolean): Promise<void>;
   // 인박스 열람 시 requested → seen 일괄 처리
   markRequestedSeen(): Promise<void>;
 

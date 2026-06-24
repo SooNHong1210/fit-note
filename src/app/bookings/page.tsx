@@ -6,7 +6,7 @@ import { subscribeBookings } from "@/lib/realtime";
 import { notifyMember } from "@/lib/push";
 import { getActiveShopId } from "@/lib/activeShop";
 import type { Booking, Member } from "@/lib/types";
-import { fmtDate, fmtDateTime } from "@/lib/date";
+import { fmtDate, fmtDateTime, hm, toISO, ymd } from "@/lib/date";
 
 const PILL = {
   requested: { label: "신청됨", color: "#B5862F", chip: "#FBF3E1" },
@@ -14,6 +14,7 @@ const PILL = {
   approved: { label: "승인됨", color: "#3E7D5A", chip: "#EAF3ED" },
   rejected: { label: "거절됨", color: "#9A938A", chip: "#EFEBE2" },
   canceled: { label: "취소됨", color: "#9A938A", chip: "#EFEBE2" },
+  proposed: { label: "시간 제안됨", color: "#B5862F", chip: "#FBF3E1" },
 } as const;
 
 export default function BookingsPage() {
@@ -21,6 +22,11 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [mode, setMode] = useState<"reject" | "propose" | null>(null);
+  const [note, setNote] = useState("");
+  const [pDate, setPDate] = useState("");
+  const [pTime, setPTime] = useState("10:00");
 
   async function refresh() {
     const [bs, ms] = await Promise.all([
@@ -69,16 +75,55 @@ export default function BookingsPage() {
     refresh();
   }
 
+  function close() {
+    setOpenId(null);
+    setMode(null);
+    setNote("");
+  }
+
+  function openReject(b: Booking) {
+    setOpenId(b.id);
+    setMode("reject");
+    setNote("");
+  }
+
+  function openPropose(b: Booking) {
+    setOpenId(b.id);
+    setMode("propose");
+    setNote("");
+    setPDate(ymd(new Date(b.slotStartsAt)));
+    setPTime(hm(new Date(b.slotStartsAt)));
+  }
+
   async function reject(b: Booking) {
-    await repo.updateBookingStatus(b.id, "rejected");
+    await repo.rejectBooking(b.id, note.trim() || undefined);
     const sid = getActiveShopId();
     if (sid)
       notifyMember(
         sid,
         b.memberId,
         "예약이 거절되었습니다",
-        `${fmtDateTime(b.slotStartsAt)} 예약 신청이 거절되었어요.`,
+        note.trim() || `${fmtDateTime(b.slotStartsAt)} 예약이 거절되었어요.`,
       );
+    close();
+    refresh();
+  }
+
+  async function propose(b: Booking) {
+    const startsAt = toISO(pDate, pTime);
+    const dur =
+      new Date(b.slotEndsAt).getTime() - new Date(b.slotStartsAt).getTime();
+    const endsAt = new Date(new Date(startsAt).getTime() + dur).toISOString();
+    await repo.proposeBooking(b.id, startsAt, endsAt, note.trim() || undefined);
+    const sid = getActiveShopId();
+    if (sid)
+      notifyMember(
+        sid,
+        b.memberId,
+        "선생님이 다른 시간을 제안했어요",
+        `${fmtDateTime(startsAt)}${note.trim() ? ` · ${note.trim()}` : ""}`,
+      );
+    close();
     refresh();
   }
 
@@ -91,7 +136,8 @@ export default function BookingsPage() {
     (b) =>
       b.status === "approved" ||
       b.status === "rejected" ||
-      b.status === "canceled",
+      b.status === "canceled" ||
+      b.status === "proposed",
   );
 
   return (
@@ -119,39 +165,105 @@ export default function BookingsPage() {
           pending.map((b) => (
             <div
               key={b.id}
-              className="flex items-center gap-4 rounded-2xl border border-line-warm border-l-[3px] border-l-gold bg-white p-4"
+              className="rounded-2xl border border-line-warm border-l-[3px] border-l-gold bg-white p-4"
             >
-              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[13px] bg-sunken text-[17px] font-extrabold text-muted">
-                {memberName(b.memberId).slice(0, 1)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[15.5px] font-bold">
-                  {memberName(b.memberId)}
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[13px] bg-sunken text-[17px] font-extrabold text-muted">
+                  {memberName(b.memberId).slice(0, 1)}
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-[13.5px] text-ink-soft">
-                  <span className="font-semibold">
-                    {fmtDate(b.slotStartsAt)}
-                  </span>
-                  <span className="text-line">·</span>
-                  <span className="num font-semibold">
-                    {fmtDateTime(b.slotStartsAt).split(" ")[1]}
-                  </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15.5px] font-bold">
+                    {memberName(b.memberId)}
+                  </div>
+                  <div className="num mt-1 text-[13.5px] font-semibold text-ink-soft">
+                    {fmtDateTime(b.slotStartsAt)}
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-shrink-0 gap-2">
-                <button
-                  onClick={() => approve(b)}
-                  className="rounded-[9px] bg-[#2E5E43] px-4 py-2 text-[13.5px] font-bold text-white"
-                >
-                  승인
-                </button>
-                <button
-                  onClick={() => reject(b)}
-                  className="rounded-[9px] border border-line bg-white px-4 py-2 text-[13.5px] font-semibold text-muted"
-                >
-                  거절
-                </button>
-              </div>
+
+              {openId === b.id && mode === "reject" ? (
+                <div className="mt-3">
+                  <input
+                    autoFocus
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="거절 사유 (선택, 회원에게 전달)"
+                    className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[14px]"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => reject(b)}
+                      className="flex-1 rounded-[9px] bg-canceled py-2 text-[13.5px] font-bold text-white"
+                    >
+                      거절 확정
+                    </button>
+                    <button
+                      onClick={close}
+                      className="rounded-[9px] border border-line bg-white px-4 py-2 text-[13.5px] font-semibold text-muted"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : openId === b.id && mode === "propose" ? (
+                <div className="mt-3">
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <input
+                      type="date"
+                      value={pDate}
+                      onChange={(e) => setPDate(e.target.value)}
+                      className="num rounded-lg border border-line bg-surface px-2 py-2 text-[14px]"
+                    />
+                    <input
+                      type="time"
+                      value={pTime}
+                      onChange={(e) => setPTime(e.target.value)}
+                      className="num rounded-lg border border-line bg-surface px-2 py-2 text-[14px]"
+                    />
+                  </div>
+                  <input
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="제안 메모 (선택)"
+                    className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[14px]"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => propose(b)}
+                      className="flex-1 rounded-[9px] bg-clay py-2 text-[13.5px] font-bold text-white"
+                    >
+                      제안 보내기
+                    </button>
+                    <button
+                      onClick={close}
+                      className="rounded-[9px] border border-line bg-white px-4 py-2 text-[13.5px] font-semibold text-muted"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => approve(b)}
+                    className="flex-1 rounded-[9px] bg-[#2E5E43] px-4 py-2 text-[13.5px] font-bold text-white"
+                  >
+                    승인
+                  </button>
+                  <button
+                    onClick={() => openPropose(b)}
+                    className="rounded-[9px] border border-line bg-white px-3 py-2 text-[13.5px] font-semibold text-clay-deep"
+                  >
+                    다른 시간 제안
+                  </button>
+                  <button
+                    onClick={() => openReject(b)}
+                    className="rounded-[9px] border border-line bg-white px-3 py-2 text-[13.5px] font-semibold text-muted"
+                  >
+                    거절
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

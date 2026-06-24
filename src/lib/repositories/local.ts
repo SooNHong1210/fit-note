@@ -468,6 +468,74 @@ export class LocalRepository implements Repository {
     this.save(p);
   }
 
+  async rejectBooking(bookingId: string, note?: string): Promise<void> {
+    const p = this.load();
+    p.bookings = p.bookings.map((x) =>
+      x.id === bookingId
+        ? {
+            ...x,
+            status: "rejected" as const,
+            teacherNote: note,
+            respondedAt: new Date().toISOString(),
+          }
+        : x,
+    );
+    this.save(p);
+  }
+
+  async proposeBooking(
+    bookingId: string,
+    startsAt: string,
+    endsAt: string,
+    note?: string,
+  ): Promise<void> {
+    const p = this.load();
+    p.bookings = p.bookings.map((x) =>
+      x.id === bookingId
+        ? {
+            ...x,
+            status: "proposed" as const,
+            proposedStartsAt: startsAt,
+            proposedEndsAt: endsAt,
+            teacherNote: note,
+          }
+        : x,
+    );
+    this.save(p);
+  }
+
+  async respondProposal(bookingId: string, accept: boolean): Promise<void> {
+    const p = this.load();
+    const b = p.bookings.find((x) => x.id === bookingId);
+    if (!b || b.status !== "proposed") return;
+    if (accept && b.proposedStartsAt && b.proposedEndsAt) {
+      p.bookings = p.bookings.map((x) =>
+        x.id === bookingId
+          ? {
+              ...x,
+              status: "approved" as const,
+              slotStartsAt: b.proposedStartsAt!,
+              slotEndsAt: b.proposedEndsAt!,
+            }
+          : x,
+      );
+      p.lessons.push({
+        id: uid(),
+        memberId: b.memberId,
+        trainerId: b.trainerId,
+        startsAt: b.proposedStartsAt,
+        endsAt: b.proposedEndsAt,
+        status: "scheduled",
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      p.bookings = p.bookings.map((x) =>
+        x.id === bookingId ? { ...x, status: "canceled" as const } : x,
+      );
+    }
+    this.save(p);
+  }
+
   // ---- 그룹 수업 ----
   private withCount(p: Partition, c: GroupClass): ClassWithCount {
     return {

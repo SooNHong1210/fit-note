@@ -897,6 +897,59 @@ function BookingCard({
     }
   }
 
+  async function respond(accept: boolean) {
+    setBusy(true);
+    try {
+      await repo.respondProposal(booking.id, accept);
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 선생님이 다른 시간을 제안한 경우
+  if (booking.status === "proposed") {
+    const nd = booking.proposedStartsAt
+      ? new Date(booking.proposedStartsAt)
+      : null;
+    return (
+      <div className="rounded-2xl border border-line-warm bg-[#FBF3E1] p-4">
+        <div className="text-[12.5px] font-bold text-[#8A6A2A]">
+          선생님이 다른 시간을 제안했어요
+        </div>
+        <div className="num mt-1.5 text-[13px] text-faint line-through">
+          {d.getMonth() + 1}/{d.getDate()} {hm(d)}
+        </div>
+        {nd && (
+          <div className="num text-[17px] font-extrabold text-clay-dark">
+            → {nd.getMonth() + 1}/{nd.getDate()} {hm(nd)}
+          </div>
+        )}
+        {booking.teacherNote && (
+          <p className="mt-2 rounded-lg bg-white px-3 py-2 text-[13px] text-ink-soft">
+            {booking.teacherNote}
+          </p>
+        )}
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => respond(true)}
+            disabled={busy}
+            className="flex-1 rounded-[10px] bg-clay py-2.5 text-[13px] font-bold text-white disabled:opacity-50"
+          >
+            이 시간으로 수락
+          </button>
+          <button
+            onClick={() => respond(false)}
+            disabled={busy}
+            className="rounded-[10px] border border-line bg-white px-4 py-2.5 text-[13px] font-bold text-muted disabled:opacity-50"
+          >
+            거절
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-line-soft bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -957,6 +1010,11 @@ function BookingCard({
           );
         })}
       </div>
+      {booking.teacherNote && (rejected || canceled) && (
+        <p className="mt-2 rounded-lg bg-panel px-3 py-2 text-[12.5px] text-muted">
+          선생님: {booking.teacherNote}
+        </p>
+      )}
       {cancellable && (
         <button
           onClick={cancel}
