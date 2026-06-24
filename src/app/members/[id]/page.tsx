@@ -314,11 +314,11 @@ export default function MemberDetailPage({
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             placeholder="수업 후 한마디…"
-            className="flex-1 rounded-lg border border-line bg-surface px-3 py-2"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2"
           />
           <button
             type="submit"
-            className="rounded-lg bg-clay px-4 font-bold text-white"
+            className="flex-shrink-0 rounded-lg bg-clay px-4 font-bold text-white"
           >
             등록
           </button>

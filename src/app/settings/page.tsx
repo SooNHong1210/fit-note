@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const repo = getRepository();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [sessionMinutes, setSessionMinutes] = useState(50);
+  const [sessionMinutes, setSessionMinutes] = useState(60);
   const [advanceLimit, setAdvanceLimit] = useState(0);
   const [rows, setRows] = useState<NewAvailability[]>([]);
   const [trainers, setTrainers] = useState<Trainer[]>([]);
@@ -225,7 +225,7 @@ export default function SettingsPage() {
               기본 세션 길이
             </div>
             <div className="flex gap-2">
-              {[30, 50, 60, 90].map((d) => {
+              {[20, 30, 60, 90].map((d) => {
                 const active = sessionMinutes === d;
                 return (
                   <button
@@ -295,11 +295,11 @@ export default function SettingsPage() {
             value={newTrainer}
             onChange={(e) => setNewTrainer(e.target.value)}
             placeholder="선생님 이름"
-            className="flex-1 rounded-lg border border-line bg-surface px-3 py-2"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2"
           />
           <button
             type="submit"
-            className="rounded-lg bg-clay px-4 font-bold text-white"
+            className="flex-shrink-0 rounded-lg bg-clay px-4 font-bold text-white"
           >
             추가
           </button>

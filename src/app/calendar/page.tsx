@@ -3,8 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getRepository } from "@/lib/repositories";
-import type { ClassWithCount, Lesson, Member, Trainer } from "@/lib/types";
+import type {
+  Booking,
+  ClassWithCount,
+  Lesson,
+  Member,
+  Trainer,
+} from "@/lib/types";
 import { nextPassUsedOnDone } from "@/lib/pass";
+import { notifyMember } from "@/lib/push";
+import { getActiveShopId } from "@/lib/activeShop";
 import {
   addDays,
   addMonths,
@@ -30,6 +38,7 @@ export default function CalendarPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [classes, setClasses] = useState<ClassWithCount[]>([]);
   const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
 
   const gridStart = useMemo(() => calendarGridStart(month), [month]);
@@ -41,16 +50,18 @@ export default function CalendarPage() {
   async function refresh() {
     const from = gridStart.toISOString();
     const to = addDays(gridStart, 42).toISOString();
-    const [ls, ms, cs, trs] = await Promise.all([
+    const [ls, ms, cs, trs, bks] = await Promise.all([
       repo.listLessons({ from, to }),
       repo.listMembers(),
       repo.listClasses({ from, to }),
       repo.listTrainers(),
+      repo.listBookings(),
     ]);
     setLessons(ls);
     setMembers(ms);
     setClasses(cs);
     setTrainers(trs);
+    setBookings(bks);
   }
 
   useEffect(() => {
@@ -70,6 +81,16 @@ export default function CalendarPage() {
     classes
       .filter((c) => sameDay(new Date(c.startsAt), day))
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+
+  // 예약 대기(승인 전): requested/seen
+  const pendingByDay = (day: Date) =>
+    bookings
+      .filter(
+        (b) =>
+          (b.status === "requested" || b.status === "seen") &&
+          sameDay(new Date(b.slotStartsAt), day),
+      )
+      .sort((a, b) => a.slotStartsAt.localeCompare(b.slotStartsAt));
 
   const today = new Date();
 
@@ -103,6 +124,10 @@ export default function CalendarPage() {
           </button>
         </div>
         <div className="flex items-center gap-3.5 text-xs text-faint">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-gold" />
+            대기
+          </span>
           {(["scheduled", "done", "canceled"] as const).map((s) => (
             <span key={s} className="flex items-center gap-1.5">
               <span
@@ -134,6 +159,7 @@ export default function CalendarPage() {
               const inMonth = day.getMonth() === month.getMonth();
               const dayLessons = lessonsByDay(day);
               const dayClasses = classesByDay(day);
+              const dayPending = pendingByDay(day);
               const isSel = sameDay(day, selectedDay);
               return (
                 <button
@@ -160,6 +186,22 @@ export default function CalendarPage() {
                       </span>
                     )}
                   </div>
+                  {dayPending.slice(0, 2).map((b) => (
+                    <div
+                      key={b.id}
+                      className="flex items-center gap-1 rounded-[5px] border border-dashed border-[#E3CF9B] bg-[#FBF3E1] px-1.5 py-0.5"
+                    >
+                      <span className="num flex-shrink-0 text-[10px] text-[#B5862F]">
+                        {hm(new Date(b.slotStartsAt))}
+                      </span>
+                      <span className="truncate text-[11px] font-bold text-[#8A6A2A]">
+                        {memberName(b.memberId)}
+                      </span>
+                      <span className="ml-auto flex-shrink-0 text-[9px] font-bold text-[#B5862F]">
+                        대기
+                      </span>
+                    </div>
+                  ))}
                   {dayClasses.slice(0, 2).map((c) => (
                     <div
                       key={c.id}
@@ -194,11 +236,19 @@ export default function CalendarPage() {
                       </span>
                     </div>
                   ))}
-                  {dayLessons.length + dayClasses.length > 4 && (
-                    <div className="pl-1.5 text-[10.5px] font-semibold text-faint">
-                      +{dayLessons.length + dayClasses.length - 4}건 더
-                    </div>
-                  )}
+                  {(() => {
+                    const shown =
+                      Math.min(2, dayPending.length) +
+                      Math.min(2, dayClasses.length) +
+                      Math.min(2, dayLessons.length);
+                    const total =
+                      dayPending.length + dayClasses.length + dayLessons.length;
+                    return total > shown ? (
+                      <div className="pl-1.5 text-[10.5px] font-semibold text-faint">
+                        +{total - shown}건 더
+                      </div>
+                    ) : null;
+                  })()}
                 </button>
               );
             })}
@@ -210,6 +260,7 @@ export default function CalendarPage() {
           day={selectedDay}
           lessons={lessonsByDay(selectedDay)}
           classes={classesByDay(selectedDay)}
+          pending={pendingByDay(selectedDay)}
           members={members}
           trainers={trainers}
           memberName={memberName}
@@ -224,6 +275,7 @@ function DayPanel({
   day,
   lessons,
   classes,
+  pending,
   members,
   trainers,
   memberName,
@@ -232,6 +284,7 @@ function DayPanel({
   day: Date;
   lessons: Lesson[];
   classes: ClassWithCount[];
+  pending: Booking[];
   members: Member[];
   trainers: Trainer[];
   memberName: (id: string) => string;
@@ -239,10 +292,42 @@ function DayPanel({
 }) {
   const repo = getRepository();
   const router = useRouter();
+
+  async function approveBooking(b: Booking) {
+    await repo.createLesson({
+      memberId: b.memberId,
+      trainerId: b.trainerId,
+      startsAt: b.slotStartsAt,
+      endsAt: b.slotEndsAt,
+    });
+    await repo.updateBookingStatus(b.id, "approved");
+    const sid = getActiveShopId();
+    if (sid)
+      notifyMember(
+        sid,
+        b.memberId,
+        "예약이 승인되었습니다",
+        `${hm(new Date(b.slotStartsAt))} 예약이 확정되었어요.`,
+      );
+    onChanged();
+  }
+
+  async function rejectBooking(b: Booking) {
+    await repo.updateBookingStatus(b.id, "rejected");
+    const sid = getActiveShopId();
+    if (sid)
+      notifyMember(
+        sid,
+        b.memberId,
+        "예약이 거절되었습니다",
+        `${hm(new Date(b.slotStartsAt))} 예약 신청이 거절되었어요.`,
+      );
+    onChanged();
+  }
   const [adding, setAdding] = useState(false);
   const [memberId, setMemberId] = useState("");
   const [time, setTime] = useState("10:00");
-  const [duration, setDuration] = useState(50);
+  const [duration, setDuration] = useState(60);
   const [lTrainer, setLTrainer] = useState("");
   const [lRepeat, setLRepeat] = useState(1);
 
@@ -250,7 +335,7 @@ function DayPanel({
   const [addingClass, setAddingClass] = useState(false);
   const [cTitle, setCTitle] = useState("");
   const [cTime, setCTime] = useState("10:00");
-  const [cDuration, setCDuration] = useState(50);
+  const [cDuration, setCDuration] = useState(60);
   const [cCapacity, setCCapacity] = useState(8);
   const [cTrainer, setCTrainer] = useState("");
   const [cRepeat, setCRepeat] = useState(1);
@@ -357,6 +442,36 @@ function DayPanel({
       </div>
 
       <div className="flex flex-col gap-2.5 p-4">
+        {pending.length > 0 && (
+          <div className="rounded-xl border border-dashed border-[#E3CF9B] bg-[#FBF3E1] p-3">
+            <div className="mb-2 text-[12.5px] font-bold text-[#8A6A2A]">
+              예약 대기 {pending.length}건
+            </div>
+            <div className="flex flex-col gap-2">
+              {pending.map((b) => (
+                <div key={b.id} className="rounded-lg bg-white p-2.5">
+                  <span className="num text-[13px] font-semibold">
+                    {hm(new Date(b.slotStartsAt))} · {memberName(b.memberId)}
+                  </span>
+                  <div className="mt-1.5 flex gap-1.5">
+                    <button
+                      onClick={() => approveBooking(b)}
+                      className="flex-1 rounded-lg bg-[#2E5E43] py-1.5 text-[12px] font-bold text-white"
+                    >
+                      승인
+                    </button>
+                    <button
+                      onClick={() => rejectBooking(b)}
+                      className="rounded-lg border border-line bg-white px-3 py-1.5 text-[12px] font-semibold text-muted"
+                    >
+                      거절
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {lessons.map((l) => {
           const st = STATUS[l.status];
           return (
@@ -549,7 +664,7 @@ function DayPanel({
                   onChange={(e) => setDuration(Number(e.target.value))}
                   className="num rounded-lg border border-line bg-surface px-3 py-2 text-sm"
                 >
-                  {[30, 50, 60, 90].map((d) => (
+                  {[20, 30, 60, 90].map((d) => (
                     <option key={d} value={d}>
                       {d}분
                     </option>
@@ -679,7 +794,7 @@ function DayPanel({
                   onChange={(e) => setCDuration(Number(e.target.value))}
                   className="num rounded-lg border border-line bg-surface px-2 py-2 text-sm"
                 >
-                  {[30, 50, 60, 90].map((d) => (
+                  {[20, 30, 60, 90].map((d) => (
                     <option key={d} value={d}>
                       {d}분
                     </option>

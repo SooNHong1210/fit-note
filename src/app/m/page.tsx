@@ -644,9 +644,15 @@ function BookCalendar({
               {selectedSlots.map((s) => (
                 <button
                   key={s.startsAt}
-                  onClick={() =>
-                    onRequest(s, hasTrainers ? trainerId : undefined)
-                  }
+                  onClick={() => {
+                    const t = new Date(s.startsAt);
+                    if (
+                      confirm(
+                        `${t.getMonth() + 1}/${t.getDate()} ${hm(t)} 예약을 신청할까요?`,
+                      )
+                    )
+                      onRequest(s, hasTrainers ? trainerId : undefined);
+                  }}
                   disabled={requesting === s.startsAt || limitReached}
                   className="num rounded-[10px] border border-line bg-surface py-2.5 text-[14px] font-semibold text-ink disabled:opacity-50"
                 >
